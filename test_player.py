@@ -38,6 +38,7 @@ def main():
 
     waveforms = SynchronizedWaveforms(top_frame, bottom_frame)
     waveforms.set_audio(audio)
+    waveforms.set_markers(metadata)
 
     if not metadata.regions:
         raise RuntimeError("The YAML metadata contains no regions.")

@@ -160,6 +160,9 @@ class WaveformView(pg.PlotWidget):
         self.current_time = 0.0
         self.waveform_pyramid: WaveformPyramid | None = None
 
+        # Marker graphics keyed by stable marker ID.
+        self.marker_items: dict[str, tuple[pg.InfiniteLine, pg.TextItem]] = {}
+
         # Target visual resolution.
         self.max_display_points = 2500
 
@@ -217,6 +220,50 @@ class WaveformView(pg.PlotWidget):
         )
 
         self.addItem(self.playhead)
+
+    def set_markers(self, markers) -> None:
+        """Display metadata markers using absolute audio time."""
+        self.clear_markers()
+
+        if markers is None:
+            return
+
+        marker_values = markers.values() if hasattr(markers, "values") else markers
+
+        for marker in marker_values:
+            marker_id = str(marker.id)
+            marker_time = float(marker.seconds)
+
+            marker_line = pg.InfiniteLine(
+                pos=marker_time,
+                angle=90,
+                movable=False,
+                pen=pg.mkPen(
+                    color="#7B1FA2",
+                    width=1.5,
+                ),
+            )
+
+            label_text = getattr(marker, "label", None) or marker_id
+            label = pg.TextItem(
+                text=str(label_text),
+                color="#6A1B9A",
+                anchor=(0, 1),
+            )
+            label.setPos(marker_time, 0.98)
+
+            self.addItem(marker_line)
+            self.addItem(label)
+
+            self.marker_items[marker_id] = (marker_line, label)
+
+    def clear_markers(self) -> None:
+        """Remove all marker lines and labels."""
+        for marker_line, label in self.marker_items.values():
+            self.removeItem(marker_line)
+            self.removeItem(label)
+
+        self.marker_items.clear()
 
     def set_audio(self, audio: AudioData) -> None:
         """Set audio and build the waveform pyramid once."""
@@ -372,6 +419,13 @@ class SynchronizedWaveforms:
 
         self.top_view.set_audio(audio)
         self.bottom_view.set_audio(audio)
+
+    def set_markers(self, metadata) -> None:
+        """Display all metadata markers in both synchronized views."""
+        markers = getattr(metadata, "markers", None)
+
+        self.top_view.set_markers(markers)
+        self.bottom_view.set_markers(markers)
 
     def set_current_time(self, current_time: float) -> None:
         """Set the same absolute time in both waveform views."""
