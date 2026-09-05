@@ -6,6 +6,143 @@ import pyqtgraph as pg
 from audio_loader import AudioData
 
 
+class WaveformPyramid:
+    """Precomputed multiresolution min/max waveform envelopes."""
+
+    def __init__(self, audio: AudioData, max_display_points: int = 2500):
+        self.audio = audio
+        self.max_display_points = int(max_display_points)
+        self.levels: list[tuple[int, np.ndarray, np.ndarray]] = []
+        self._build()
+
+    def _build(self) -> None:
+        samples = self.audio.samples
+        if len(samples) == 0:
+            return
+
+        block_size = 2
+
+        while True:
+            minimums, maximums = self._make_level(samples, block_size)
+            self.levels.append((block_size, minimums, maximums))
+
+            if len(minimums) <= self.max_display_points:
+                break
+
+            block_size *= 2
+
+    @staticmethod
+    def _make_level(
+        samples: np.ndarray,
+        block_size: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        count = len(samples)
+        full_count = count // block_size
+        remainder = count % block_size
+
+        if full_count:
+            full = samples[:full_count * block_size].reshape(
+                full_count,
+                block_size,
+            )
+            minimums = np.min(full, axis=1)
+            maximums = np.max(full, axis=1)
+        else:
+            minimums = np.empty(0, dtype=samples.dtype)
+            maximums = np.empty(0, dtype=samples.dtype)
+
+        if remainder:
+            tail = samples[full_count * block_size:]
+            minimums = np.concatenate(
+                (minimums, np.asarray([np.min(tail)], dtype=samples.dtype))
+            )
+            maximums = np.concatenate(
+                (maximums, np.asarray([np.max(tail)], dtype=samples.dtype))
+            )
+
+        return minimums, maximums
+
+    def select_level(
+        self,
+        visible_samples: int,
+        target_bins: int,
+    ) -> tuple[int, np.ndarray, np.ndarray]:
+        if not self.levels:
+            raise RuntimeError("Waveform pyramid contains no levels.")
+
+        target_bins = max(1, int(target_bins))
+        desired_block = max(
+            1,
+            int(np.ceil(visible_samples / target_bins)),
+        )
+
+        for level in self.levels:
+            if level[0] >= desired_block:
+                return level
+
+        return self.levels[-1]
+
+    def get_visible_envelope(
+        self,
+        start_sample: int,
+        end_sample: int,
+        target_bins: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        start_sample = max(0, int(start_sample))
+        end_sample = min(len(self.audio.samples), int(end_sample))
+
+        if end_sample <= start_sample:
+            empty = np.empty(0, dtype=np.float64)
+            return empty, empty, empty
+
+        visible_samples = end_sample - start_sample
+        block_size, minimums, maximums = self.select_level(
+            visible_samples,
+            target_bins,
+        )
+
+        first_bin = start_sample // block_size
+        last_bin = (end_sample - 1) // block_size
+
+        minimums = minimums[first_bin:last_bin + 1]
+        maximums = maximums[first_bin:last_bin + 1]
+
+        # Correct edge bins when the visible range cuts through a block.
+        if minimums.size:
+            if start_sample % block_size:
+                block_end = min(
+                    (first_bin + 1) * block_size,
+                    end_sample,
+                )
+                chunk = self.audio.samples[start_sample:block_end]
+                if len(chunk):
+                    minimums = minimums.copy()
+                    maximums = maximums.copy()
+                    minimums[0] = np.min(chunk)
+                    maximums[0] = np.max(chunk)
+
+            last_bin_start = last_bin * block_size
+            if end_sample < last_bin_start + block_size:
+                chunk = self.audio.samples[last_bin_start:end_sample]
+                if len(chunk):
+                    minimums = minimums.copy()
+                    maximums = maximums.copy()
+                    minimums[-1] = np.min(chunk)
+                    maximums[-1] = np.max(chunk)
+
+        bin_starts = (
+            np.arange(first_bin, first_bin + len(minimums), dtype=np.float64)
+            * block_size
+        )
+        bin_ends = np.minimum(
+            bin_starts + block_size,
+            len(self.audio.samples),
+        )
+
+        envelope = np.column_stack((minimums, maximums))
+        return bin_starts, bin_ends, envelope
+
+
 class WaveformView(pg.PlotWidget):
     """Display an absolute-time portion of an AudioData waveform.
 
@@ -13,11 +150,7 @@ class WaveformView(pg.PlotWidget):
     The playhead is always fixed at the center of the view.
     """
 
-    def __init__(
-        self,
-        window_seconds: float,
-        parent=None,
-    ):
+    def __init__(self, window_seconds: float, parent=None):
         super().__init__(parent)
 
         self.window_seconds = float(window_seconds)
@@ -25,39 +158,27 @@ class WaveformView(pg.PlotWidget):
 
         self.audio: AudioData | None = None
         self.current_time = 0.0
+        self.waveform_pyramid: WaveformPyramid | None = None
 
-        # Keep a reasonable number of waveform bins on screen.
-        self.max_display_points = 6000
+        # Target visual resolution.
+        self.max_display_points = 2500
 
         self._configure_plot()
 
     def _configure_plot(self) -> None:
         """Configure the pyqtgraph view."""
 
-        # Light/default plot background.
         self.setBackground("white")
 
         plot_item = self.getPlotItem()
 
-        # ---------------------------------------------------------
-        # Axes
-        # ---------------------------------------------------------
-
-        # No axis titles.
         plot_item.setLabel("bottom", "")
         plot_item.setLabel("left", "")
-
-        # Amplitude values are not useful for this application.
         plot_item.hideAxis("left")
 
-        # Keep the absolute-time X-axis values.
         bottom_axis = plot_item.getAxis("bottom")
         bottom_axis.setPen("#777777")
         bottom_axis.setTextPen("#333333")
-
-        # ---------------------------------------------------------
-        # Grid
-        # ---------------------------------------------------------
 
         plot_item.showGrid(
             x=True,
@@ -65,19 +186,11 @@ class WaveformView(pg.PlotWidget):
             alpha=0.15,
         )
 
-        # ---------------------------------------------------------
-        # Y range
-        # ---------------------------------------------------------
-
         self.setYRange(
             -1.05,
             1.05,
             padding=0,
         )
-
-        # ---------------------------------------------------------
-        # Initial X range
-        # ---------------------------------------------------------
 
         self.setXRange(
             -self.half_window,
@@ -85,21 +198,14 @@ class WaveformView(pg.PlotWidget):
             padding=0,
         )
 
-        # ---------------------------------------------------------
-        # Waveform
-        # ---------------------------------------------------------
-
         self.waveform_curve = self.plot(
             pen=pg.mkPen(
                 color="#1976D2",
                 width=1,
-            ),
+            )
         )
 
-        # ---------------------------------------------------------
-        # Fixed playhead
-        # ---------------------------------------------------------
-
+        # Fixed playhead: absolute current_time.
         self.playhead = pg.InfiniteLine(
             pos=self.current_time,
             angle=90,
@@ -113,15 +219,20 @@ class WaveformView(pg.PlotWidget):
         self.addItem(self.playhead)
 
     def set_audio(self, audio: AudioData) -> None:
-        """Set the audio source displayed by this waveform."""
+        """Set audio and build the waveform pyramid once."""
 
         self.audio = audio
         self.current_time = 0.0
 
+        self.waveform_pyramid = WaveformPyramid(
+            audio,
+            max_display_points=self.max_display_points,
+        )
+
         self.update_waveform()
 
     def set_current_time(self, current_time: float) -> None:
-        """Set the absolute audio position at the center of the view."""
+        """Set absolute audio position at the center of the view."""
 
         if self.audio is None:
             return
@@ -137,45 +248,23 @@ class WaveformView(pg.PlotWidget):
         self.update_waveform()
 
     def update_waveform(self) -> None:
-        """Update the waveform around the current absolute time."""
+        """Display the precomputed envelope around current_time."""
 
-        if self.audio is None:
+        if self.audio is None or self.waveform_pyramid is None:
             self.waveform_curve.clear()
             return
-
-        # ---------------------------------------------------------
-        # Absolute visible time range
-        # ---------------------------------------------------------
 
         view_start = self.current_time - self.half_window
         view_end = self.current_time + self.half_window
 
-        # Actual audio exists only between 0 and duration.
-        audio_start = max(
-            0.0,
-            view_start,
-        )
+        audio_start = max(0.0, view_start)
+        audio_end = min(self.audio.duration, view_end)
 
-        audio_end = min(
-            self.audio.duration,
-            view_end,
-        )
-
-        # No audio exists inside the visible window.
         if audio_start >= audio_end:
             self.waveform_curve.clear()
-
-            self.setXRange(
-                view_start,
-                view_end,
-                padding=0,
-            )
-
+            self.setXRange(view_start, view_end, padding=0)
+            self.playhead.setPos(self.current_time)
             return
-
-        # ---------------------------------------------------------
-        # Convert visible audio range to samples
-        # ---------------------------------------------------------
 
         sample_rate = self.audio.sample_rate
 
@@ -183,7 +272,6 @@ class WaveformView(pg.PlotWidget):
             0,
             int(np.floor(audio_start * sample_rate)),
         )
-
         end_sample = min(
             len(self.audio.samples),
             int(np.ceil(audio_end * sample_rate)),
@@ -191,87 +279,42 @@ class WaveformView(pg.PlotWidget):
 
         if end_sample <= start_sample:
             self.waveform_curve.clear()
+            self.setXRange(view_start, view_end, padding=0)
+            self.playhead.setPos(self.current_time)
             return
 
-        samples = self.audio.samples[
-            start_sample:end_sample
-        ]
-
-        # ---------------------------------------------------------
-        # Downsample into min/max waveform bins
-        # ---------------------------------------------------------
-
-        num_bins = min(
+        target_bins = min(
             self.max_display_points,
-            max(1000, self.width() * 4),
+            max(500, self.width() * 2),
         )
 
-        num_bins = min(
-            num_bins,
-            len(samples),
+        bin_starts, bin_ends, envelope = (
+            self.waveform_pyramid.get_visible_envelope(
+                start_sample,
+                end_sample,
+                target_bins,
+            )
         )
 
-        if num_bins <= 0:
+        if len(envelope) == 0:
             self.waveform_curve.clear()
-            return
+        else:
+            x_starts = bin_starts / sample_rate
+            x_ends = bin_ends / sample_rate
 
-        # Divide samples into approximately equal bins.
-        edges = np.linspace(
-            0,
-            len(samples),
-            num_bins + 1,
-            dtype=np.int64,
-        )
+            # Use the center of each bin for a vertical min/max segment.
+            x_values = np.repeat(
+                (x_starts + x_ends) / 2.0,
+                2,
+            )
+            y_values = envelope.reshape(-1)
 
-        x_values = []
-        y_values = []
-
-        for i in range(num_bins):
-            bin_start = edges[i]
-            bin_end = edges[i + 1]
-
-            if bin_end <= bin_start:
-                continue
-
-            chunk = samples[bin_start:bin_end]
-
-            minimum = np.min(chunk)
-            maximum = np.max(chunk)
-
-            # Absolute time corresponding to this bin.
-            bin_start_time = (
-                audio_start
-                + (bin_start / sample_rate)
+            self.waveform_curve.setData(
+                x_values,
+                y_values,
             )
 
-            bin_end_time = (
-                audio_start
-                + (bin_end / sample_rate)
-            )
-
-            x_values.extend([
-                bin_start_time,
-                bin_end_time,
-            ])
-
-            y_values.extend([
-                minimum,
-                maximum,
-            ])
-
-        # ---------------------------------------------------------
-        # Draw waveform
-        # ---------------------------------------------------------
-
-        self.waveform_curve.setData(
-            np.asarray(x_values),
-            np.asarray(y_values),
-        )
-
-        # ---------------------------------------------------------
-        # Keep absolute-time view centered on current_time
-        # ---------------------------------------------------------
-
+        # Keep the absolute-time window centered.
         self.setXRange(
             view_start,
             view_end,
@@ -288,11 +331,7 @@ class SynchronizedWaveforms:
     TOP_WINDOW_SECONDS = 60.0
     BOTTOM_WINDOW_SECONDS = 10.0
 
-    def __init__(
-        self,
-        top_frame,
-        bottom_frame,
-    ):
+    def __init__(self, top_frame, bottom_frame):
         self.top_view = WaveformView(
             self.TOP_WINDOW_SECONDS,
             top_frame,
