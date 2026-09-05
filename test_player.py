@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QFrame, QHBoxLayout, QPus
 
 from audio_loader import AudioLoader
 from audio_player import AudioPlayer
-from metadata import MetadataParser, Marker
+from metadata import MetadataParser, Marker, format_seconds_as_time, generate_marker_id
 from waveform import SynchronizedWaveforms
 
 YAML_PATH = Path("mohananga.yaml")
@@ -89,15 +89,12 @@ def main():
         if playback_active:
             return
 
-        marker_id = f"marker{len(metadata.markers) + 1}"
-
-        while marker_id in metadata.markers:
-            marker_id = f"marker{len(metadata.markers) + 1}"
+        marker_id = generate_marker_id(set(metadata.markers))
 
         marker = Marker(
             id=marker_id,
-            time=f"{seconds:.3f}",
-        )
+            time=format_seconds_as_time(seconds),
+            )
 
         metadata.markers[marker_id] = marker
         waveforms.set_markers(metadata)

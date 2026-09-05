@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 import yaml
-
+import random
+import string
 
 def parse_time_to_seconds(time_value) -> float:
     """
@@ -89,7 +90,6 @@ def parse_time_to_seconds(time_value) -> float:
 
     return seconds
 
-
 def format_seconds_as_time(seconds: float) -> str:
     """
     Convert seconds into the canonical human-readable metadata format.
@@ -110,11 +110,10 @@ def format_seconds_as_time(seconds: float) -> str:
         3600     -> "01:00:00"
         3723.125 -> "01:02:03.125"
     """
-
     if seconds < 0:
         raise ValueError("Time cannot be negative.")
 
-    seconds = round(float(seconds), 6)
+    seconds = round(float(seconds), 3)
 
     hours = int(seconds // 3600)
     remaining = seconds - (hours * 3600)
@@ -122,6 +121,7 @@ def format_seconds_as_time(seconds: float) -> str:
     minutes = int(remaining // 60)
     remaining -= minutes * 60
 
+    # Handle floating-point rounding that may push seconds to 60.
     if remaining >= 60:
         remaining = 0
         minutes += 1
@@ -130,19 +130,30 @@ def format_seconds_as_time(seconds: float) -> str:
         minutes = 0
         hours += 1
 
-    if remaining.is_integer():
-        seconds_text = f"{int(remaining):02d}"
-    else:
-        seconds_text = f"{remaining:09.6f}".rstrip("0")
+    # Format seconds with up to 6 decimal places,
+    # then remove unnecessary trailing zeros.
+    seconds_text = f"{remaining:.3f}".rstrip("0").rstrip(".")
 
-        if remaining < 10:
-            seconds_text = "0" + seconds_text
+    # Seconds must always have two digits before the decimal point.
+    if remaining < 10:
+        seconds_text = "0" + seconds_text
 
     if hours > 0:
         return f"{hours:02d}:{minutes:02d}:{seconds_text}"
 
     return f"{minutes:02d}:{seconds_text}"
 
+def generate_marker_id(existing_ids: set[str]) -> str:
+    """Generate a unique marker ID in the form mXXX."""
+    characters = string.ascii_letters + string.digits
+
+    while True:
+        marker_id = "m" + "".join(
+            random.choices(characters, k=3)
+        )
+
+        if marker_id not in existing_ids:
+            return marker_id
 
 @dataclass
 class Marker:
