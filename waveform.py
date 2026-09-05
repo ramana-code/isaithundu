@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QObject, Signal
 
 from audio_loader import AudioData
 
@@ -391,13 +391,17 @@ class WaveformView(pg.PlotWidget):
 
         super().mousePressEvent(event)
 
-class SynchronizedWaveforms:
+class SynchronizedWaveforms(QObject):
     """Manage the two synchronized waveform views."""
 
     TOP_WINDOW_SECONDS = 60.0
     BOTTOM_WINDOW_SECONDS = 10.0
 
+    waveform_clicked = Signal(float)
+
     def __init__(self, top_frame, bottom_frame):
+        super().__init__()
+
         self.top_view = WaveformView(
             self.TOP_WINDOW_SECONDS,
             top_frame,
@@ -456,4 +460,4 @@ class SynchronizedWaveforms:
 
     def _waveform_clicked(self, absolute_time: float) -> None:
         """Handle a click from either synchronized waveform."""
-        print(f"Waveform clicked at {absolute_time:.3f} seconds")
+        self.waveform_clicked.emit(absolute_time)

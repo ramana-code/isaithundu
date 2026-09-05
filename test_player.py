@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QFrame, QHBoxLayout, QPus
 
 from audio_loader import AudioLoader
 from audio_player import AudioPlayer
-from metadata import MetadataParser
+from metadata import MetadataParser, Marker
 from waveform import SynchronizedWaveforms
 
 YAML_PATH = Path("mohananga.yaml")
@@ -50,6 +50,7 @@ def main():
 
     player = AudioPlayer()
     player.set_audio(audio)
+    playback_active = False
 
     layout = play_frame.layout()
     if layout is None:
@@ -68,16 +69,42 @@ def main():
     layout.addStretch()
 
     def play_region():
+        nonlocal playback_active
+        playback_active = True
         player.set_loop(loop_checkbox.isChecked())
         player.play(start_time=region_start, end_time=region_end)
 
     def pause_playback():
+        nonlocal playback_active
+        playback_active = False
         player.pause()
 
     def stop_playback():
+        nonlocal playback_active
+        playback_active = False
         player.stop()
         waveforms.set_current_time(region_start)
 
+    def on_waveform_clicked(seconds: float):
+        if playback_active:
+            return
+
+        marker_id = f"marker{len(metadata.markers) + 1}"
+
+        while marker_id in metadata.markers:
+            marker_id = f"marker{len(metadata.markers) + 1}"
+
+        marker = Marker(
+            id=marker_id,
+            time=f"{seconds:.3f}",
+        )
+
+        metadata.markers[marker_id] = marker
+        waveforms.set_markers(metadata)
+
+        print(f"Created marker: {marker.display_label} at {marker.time} seconds")
+
+    waveforms.waveform_clicked.connect(on_waveform_clicked)
     play_button.clicked.connect(play_region)
     pause_button.clicked.connect(pause_playback)
     stop_button.clicked.connect(stop_playback)
