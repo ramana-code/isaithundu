@@ -1,0 +1,40 @@
+file_format: "AudioMetadataSchema"
+schema_version: "1.1.0"
+
+target_audio:
+  file_name: "mohananga.mp3"
+
+markers:
+  - id: "pos1"
+    time: "00:00:30.0"
+    label: "Introduction"
+    description: "some description pos1"
+
+  - id: "pos2"
+    time: "00:36.0"
+
+  - id: "pos3"
+    time: "00:01:20.124"
+    label: "Verse"
+    description: "pos3 description"
+
+  - id: "pos4"
+    time: "00:01:30.0"
+
+regions:
+  - id: "segment1"
+    start: "pos1"
+    end: "pos2"
+    label: "Opening section"
+    description: "some description"
+
+  - id: "segment2"
+    start: "pos2"
+    end: "pos4"
+    label: "Second section"
+
+  - id: "third"
+    start: "pos1"
+    end: "pos3"
+    label: "Third segment"
+    description: "third segment"
