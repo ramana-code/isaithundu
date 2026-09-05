@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
+from PySide6.QtCore import Qt, Signal
 
 from audio_loader import AudioData
 
@@ -149,6 +150,8 @@ class WaveformView(pg.PlotWidget):
     The X-axis uses absolute audio time.
     The playhead is always fixed at the center of the view.
     """
+
+    clicked=Signal(float)
 
     def __init__(self, window_seconds: float, parent=None):
         super().__init__(parent)
@@ -371,6 +374,22 @@ class WaveformView(pg.PlotWidget):
         # Keep the playhead at the actual absolute audio position.
         self.playhead.setPos(self.current_time)
 
+    def mousePressEvent(self, event) -> None:
+        """Emit the absolute audio time when the waveform is clicked."""
+        if event.button() == Qt.LeftButton and self.audio is not None:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            view_pos = self.getPlotItem().vb.mapSceneToView(scene_pos)
+
+            click_time = float(view_pos.x())
+
+            click_time = max(
+                0.0,
+                min(click_time, self.audio.duration),
+            )
+
+            self.clicked.emit(click_time)
+
+        super().mousePressEvent(event)
 
 class SynchronizedWaveforms:
     """Manage the two synchronized waveform views."""
@@ -398,6 +417,8 @@ class SynchronizedWaveforms:
             bottom_frame,
             self.bottom_view,
         )
+        self.top_view.clicked.connect(self._waveform_clicked)
+        self.bottom_view.clicked.connect(self._waveform_clicked)
 
     @staticmethod
     def _install_view(frame, view) -> None:
@@ -432,3 +453,7 @@ class SynchronizedWaveforms:
 
         self.top_view.set_current_time(current_time)
         self.bottom_view.set_current_time(current_time)
+
+    def _waveform_clicked(self, absolute_time: float) -> None:
+        """Handle a click from either synchronized waveform."""
+        print(f"Waveform clicked at {absolute_time:.3f} seconds")
