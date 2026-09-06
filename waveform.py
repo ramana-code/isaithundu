@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 
 from audio_loader import AudioData
 
@@ -151,7 +151,7 @@ class WaveformView(pg.PlotWidget):
     The playhead is always fixed at the center of the view.
     """
 
-    clicked=Signal(float)
+    clicked = Signal(float)
 
     def __init__(self, window_seconds: float, parent=None):
         super().__init__(parent)
@@ -165,6 +165,7 @@ class WaveformView(pg.PlotWidget):
 
         # Marker graphics keyed by stable marker ID.
         self.marker_items: dict[str, tuple[pg.InfiniteLine, pg.TextItem]] = {}
+        self.selected_marker_id: str | None = None
 
         # Target visual resolution.
         self.max_display_points = 2500
@@ -260,6 +261,30 @@ class WaveformView(pg.PlotWidget):
 
             self.marker_items[marker_id] = (marker_line, label)
 
+    def select_marker(self, marker_id: str | None) -> None:
+        """Visually select one marker in this waveform."""
+        if self.selected_marker_id in self.marker_items:
+            old_line, _old_label = self.marker_items[self.selected_marker_id]
+            old_line.setPen(
+                pg.mkPen(
+                    color="#7B1FA2",
+                    width=1.5,
+                )
+            )
+
+        self.selected_marker_id = (
+            str(marker_id) if marker_id is not None else None
+        )
+
+        if self.selected_marker_id in self.marker_items:
+            line, _label = self.marker_items[self.selected_marker_id]
+            line.setPen(
+                pg.mkPen(
+                    color="#E91E63",
+                    width=2.5,
+                )
+            )
+
     def clear_markers(self) -> None:
         """Remove all marker lines and labels."""
         for marker_line, label in self.marker_items.values():
@@ -267,6 +292,7 @@ class WaveformView(pg.PlotWidget):
             self.removeItem(label)
 
         self.marker_items.clear()
+        self.selected_marker_id = None
 
     def set_audio(self, audio: AudioData) -> None:
         """Set audio and build the waveform pyramid once."""
@@ -451,6 +477,11 @@ class SynchronizedWaveforms(QObject):
 
         self.top_view.set_markers(markers)
         self.bottom_view.set_markers(markers)
+
+    def select_marker(self, marker_id: str | None) -> None:
+        """Select the same marker in both waveform views."""
+        self.top_view.select_marker(marker_id)
+        self.bottom_view.select_marker(marker_id)
 
     def set_current_time(self, current_time: float) -> None:
         """Set the same absolute time in both waveform views."""

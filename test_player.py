@@ -3,11 +3,24 @@ import sys
 
 from PySide6.QtCore import QFile, QTimer
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtWidgets import QApplication, QCheckBox, QFrame, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QFrame,
+    QHBoxLayout,
+    QVBoxLayout,
+    QPushButton,
+)
 
 from audio_loader import AudioLoader
 from audio_player import AudioPlayer
-from metadata import MetadataParser, Marker, format_seconds_as_time, generate_marker_id
+from metadata import (
+    MetadataParser,
+    Marker,
+    format_seconds_as_time,
+    generate_marker_id,
+)
+from marker_table import MarkerTable
 from waveform import SynchronizedWaveforms
 
 YAML_PATH = Path("mohananga.yaml")
@@ -31,14 +44,33 @@ def main():
     top_frame = window.findChild(QFrame, "topWaveformFrame")
     bottom_frame = window.findChild(QFrame, "bottomWaveformFrame")
     play_frame = window.findChild(QFrame, "playFrame")
+    marker_frame = window.findChild(QFrame, "markerFrame")
     if top_frame is None or bottom_frame is None:
         raise RuntimeError("Could not find waveform frames in the UI.")
     if play_frame is None:
         raise RuntimeError("Could not find 'playFrame' in the UI.")
+    if marker_frame is None:
+        raise RuntimeError("Could not find 'markerFrame' in the UI.")
 
     waveforms = SynchronizedWaveforms(top_frame, bottom_frame)
     waveforms.set_audio(audio)
     waveforms.set_markers(metadata)
+
+    # ---------------------------------------------------------
+    # Marker table
+    # ---------------------------------------------------------
+
+    marker_table = MarkerTable(marker_frame)
+
+    marker_layout = marker_frame.layout()
+    if marker_layout is None:
+        marker_layout = QVBoxLayout(marker_frame)
+
+    marker_layout.setContentsMargins(0, 0, 0, 0)
+    marker_layout.setSpacing(0)
+    marker_layout.addWidget(marker_table)
+
+    marker_table.set_markers(metadata.markers)
 
     if not metadata.regions:
         raise RuntimeError("The YAML metadata contains no regions.")
@@ -50,7 +82,6 @@ def main():
 
     player = AudioPlayer()
     player.set_audio(audio)
-    playback_active = False
 
     layout = play_frame.layout()
     if layout is None:
@@ -69,39 +100,48 @@ def main():
     layout.addStretch()
 
     def play_region():
-        nonlocal playback_active
-        playback_active = True
         player.set_loop(loop_checkbox.isChecked())
         player.play(start_time=region_start, end_time=region_end)
 
     def pause_playback():
-        nonlocal playback_active
-        playback_active = False
         player.pause()
 
     def stop_playback():
-        nonlocal playback_active
-        playback_active = False
         player.stop()
         waveforms.set_current_time(region_start)
 
+
     def on_waveform_clicked(seconds: float):
-        if playback_active:
+        # Markers may be created only when playback is stopped or paused.
+        if player.is_playing:
             return
 
         marker_id = generate_marker_id(set(metadata.markers))
-
         marker = Marker(
             id=marker_id,
             time=format_seconds_as_time(seconds),
-            )
+        )
 
         metadata.markers[marker_id] = marker
-        waveforms.set_markers(metadata)
 
-        print(f"Created marker: {marker.display_label} at {marker.time} seconds")
+        waveforms.set_markers(metadata)
+        marker_table.set_markers(
+            metadata.markers,
+            select_marker_id=marker_id,
+        )
+        waveforms.select_marker(marker_id)
+
+        print(f"Created marker: {marker.id} at {marker.time}")
+
+    def select_marker_from_table(marker_id: str):
+        waveforms.select_marker(marker_id)
+
+    def select_marker_from_waveform(marker_id: str):
+        marker_table.select_marker(marker_id)
 
     waveforms.waveform_clicked.connect(on_waveform_clicked)
+    marker_table.marker_selected.connect(select_marker_from_table)
+
     play_button.clicked.connect(play_region)
     pause_button.clicked.connect(pause_playback)
     stop_button.clicked.connect(stop_playback)
