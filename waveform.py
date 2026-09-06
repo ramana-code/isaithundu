@@ -478,7 +478,7 @@ class WaveformView(pg.PlotWidget):
         self.playhead.setPos(self.current_time)
 
     def mousePressEvent(self, event) -> None:
-        """Handle marker dragging or normal marker creation."""
+        """Handle marker dragging or new-marker creation."""
 
         if (
             event.button() == Qt.MouseButton.LeftButton
@@ -486,7 +486,10 @@ class WaveformView(pg.PlotWidget):
         ):
             mouse_pos = event.position().toPoint()
 
-            # A click near the selected marker begins a drag.
+            # ---------------------------------------------------------
+            # Selected marker gets first priority: begin dragging.
+            # ---------------------------------------------------------
+
             if self._selected_marker_near_mouse(mouse_pos):
                 self._dragging_marker_id = (
                     self.selected_marker_id
@@ -495,8 +498,20 @@ class WaveformView(pg.PlotWidget):
                 event.accept()
                 return
 
-            # Otherwise this is an ordinary marker-creation click.
+            # ---------------------------------------------------------
+            # Any other existing marker blocks marker creation.
+            # ---------------------------------------------------------
+
+            if self._marker_near_mouse(mouse_pos):
+                event.accept()
+                return
+
+            # ---------------------------------------------------------
+            # Otherwise this is a normal marker-creation click.
+            # ---------------------------------------------------------
+
             scene_pos = self.mapToScene(mouse_pos)
+
             view_pos = (
                 self.getPlotItem()
                 .vb
@@ -675,6 +690,38 @@ class WaveformView(pg.PlotWidget):
             )
             <= self.marker_drag_tolerance_pixels
         )
+
+    def _marker_near_mouse(
+    self,
+    mouse_pos,
+    ) -> bool:
+        """Return True when the mouse is within the marker hit tolerance."""
+
+        tolerance = self.marker_drag_tolerance_pixels
+
+        for marker_line, _label in self.marker_items.values():
+            marker_time = float(marker_line.value())
+
+            scene_pos = (
+                self.getPlotItem()
+                .vb
+                .mapViewToScene(
+                    pg.Point(marker_time, 0)
+                )
+            )
+
+            local_pos = self.mapFromScene(scene_pos)
+
+            if (
+                abs(
+                    float(local_pos.x())
+                    - mouse_pos.x()
+                )
+                <= tolerance
+            ):
+                return True
+
+        return False
 
 class SynchronizedWaveforms(QObject):
     """Manage the two synchronized waveform views."""
