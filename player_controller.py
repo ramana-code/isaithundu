@@ -12,12 +12,15 @@ from PySide6.QtWidgets import (
 
 from audio_player import AudioPlayer
 from marker_dialog import MarkerDialog
+from region_dialog import RegionDialog
 from marker_table import MarkerTable
 from metadata import (
     AudioMetadata,
     Marker,
+    Region,
     format_seconds_as_time,
     generate_marker_id,
+    generate_region_id,
 )
 from waveform import SynchronizedWaveforms
 from region_table import RegionTable
@@ -160,7 +163,7 @@ class PlayerController:
         self._update_marker_delete_state()
 
     def _create_region_table(self) -> None:
-        """Create and install the region table."""
+        """Create and install the region table and Add Region button."""
 
         self.region_table = RegionTable(
             self.region_frame
@@ -180,14 +183,26 @@ class PlayerController:
             0,
         )
 
-        layout.setSpacing(0)
+        layout.setSpacing(4)
 
         layout.addWidget(
             self.region_table
         )
 
+        self.add_region_button = QPushButton(
+            "Add Region"
+        )
+
+        layout.addWidget(
+            self.add_region_button
+        )
+
         self.region_table.set_regions(
             self.metadata
+        )
+
+        self.add_region_button.clicked.connect(
+            self.add_region
         )
 
     def _create_playback_controls(self) -> None:
@@ -276,7 +291,7 @@ class PlayerController:
 
         # Waveform clicks.
         self.waveforms.waveform_clicked.connect(
-            self.on_waveform_clicked
+            self.add_marker
         )
 
         # Marker table selection.
@@ -469,7 +484,7 @@ class PlayerController:
     # Marker handling
     # -----------------------------------------------------------------
 
-    def on_waveform_clicked(
+    def add_marker(
         self,
         seconds: float,
     ) -> None:
@@ -517,30 +532,6 @@ class PlayerController:
             marker_id
         )
 
-    def select_region_from_table(
-        self,
-        region_id: str,
-    ) -> None:
-        """Make a region the active playback region."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, _end_time = (
-            self._get_active_region_times()
-        )
-
-        if not self.player.is_playing:
-            self.waveforms.set_current_time(
-                start_time
-            )
-
     def select_marker_from_region(
         self,
         marker_id: str,
@@ -556,132 +547,6 @@ class PlayerController:
 
         self.waveforms.select_marker(
             marker_id
-        )
-
-    def play_selected_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Play a selected region once."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, end_time = (
-            self._get_active_region_times()
-        )
-
-        self.loop_checkbox.setChecked(False)
-
-        self.waveforms.set_playback_position(
-            start_time
-        )
-
-        self.marker_table.set_playback_active(
-            True
-        )
-        self.region_table.set_playback_active(
-            True
-        )
-
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-    def loop_selected_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Play a selected region repeatedly."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, end_time = (
-            self._get_active_region_times()
-        )
-
-        self.loop_checkbox.setChecked(True)
-
-        self.waveforms.set_playback_position(
-            start_time
-        )
-
-        self.marker_table.set_playback_active(
-            True
-        )
-        self.region_table.set_playback_active(
-            True
-        )
-
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-    def edit_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Temporarily report the requested region edit."""
-
-        print(
-            f"Edit region: {region_id}"
-        )
-
-    def delete_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Delete a non-reserved region."""
-
-        if region_id in self.region_table.RESERVED_REGION_IDS:
-            return
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        # Keep at least the required default region.
-        if len(self.metadata.regions) == 1:
-            return
-
-        was_active = (
-            region is self.active_region
-        )
-
-        self.metadata.regions.remove(
-            region
-        )
-
-        if was_active:
-            self.active_region = (
-                self.metadata.regions[0]
-            )
-
-        self.region_table.set_regions(
-            self.metadata,
-            select_region_id=(
-                self.active_region.id
-                if self.metadata.regions
-                else None
-            ),
         )
 
     def edit_marker(
@@ -796,6 +661,298 @@ class PlayerController:
 
         self.region_table.set_regions(
             self.metadata
+        )
+
+    # -----------------------------------------------------------------
+    # Region handling
+    # -----------------------------------------------------------------
+
+    def select_region_from_table(
+        self,
+        region_id: str,
+    ) -> None:
+        """Make a region the active playback region."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, _end_time = (
+            self._get_active_region_times()
+        )
+
+        if not self.player.is_playing:
+            self.waveforms.set_current_time(
+                start_time
+            )
+
+    def play_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region once."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(False)
+
+        self.waveforms.set_playback_position(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def loop_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region repeatedly."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(True)
+
+        self.waveforms.set_playback_position(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def add_region(self) -> None:
+        """Create a new region using existing markers."""
+
+        if self.player.is_playing:
+            return
+
+        markers = sorted(
+            self.metadata.markers.values(),
+            key=lambda marker: marker.seconds,
+        )
+
+        if len(markers) < 2:
+            print(
+                "Cannot add region: "
+                "at least two markers are required."
+            )
+            return
+
+        selected_marker_id = (
+            self.marker_table.selected_marker_id()
+        )
+
+        start_marker_id = None
+        end_marker_id = None
+
+        if selected_marker_id is not None:
+            for index, marker in enumerate(markers):
+                if marker.id == selected_marker_id:
+                    start_marker_id = marker.id
+
+                    if index + 1 < len(markers):
+                        end_marker_id = markers[
+                            index + 1
+                        ].id
+
+                    break
+
+        # If there is no selected marker, use the first
+        # two chronological markers.
+        if start_marker_id is None:
+            start_marker_id = markers[0].id
+            end_marker_id = markers[1].id
+
+        # A selected marker may be the last marker, in which
+        # case there is no marker after it.
+        if end_marker_id is None:
+            print(
+                "Cannot add region: "
+                "the selected marker has no later marker."
+            )
+            return
+
+        region_id = generate_region_id(
+            {
+                region.id
+                for region in self.metadata.regions
+            }
+        )
+
+        # This Region is temporary until the user accepts
+        # the dialog. It is NOT added to metadata yet.
+        region = Region(
+            id=region_id,
+            start=start_marker_id,
+            end=end_marker_id,
+            label=None,
+            description="",
+        )
+
+        dialog = RegionDialog(
+            region,
+            self.metadata,
+            parent=self.window,
+        )
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        # Only now does the new region become part of the metadata.
+        self.metadata.regions.append(region)
+
+        self.region_table.set_regions(
+            self.metadata,
+            select_region_id=region_id,
+        )
+
+        self._update_marker_delete_state()
+
+    def edit_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Open the region editor for a normal region."""
+
+        if self.player.is_playing:
+            return
+
+        if region_id in self.region_table.RESERVED_REGION_IDS:
+            return
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        dialog = RegionDialog(
+            region,
+            self.metadata,
+            parent=self.window,
+        )
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self._region_was_edited(
+            region_id
+        )
+
+    def _region_was_edited(
+        self,
+        region_id: str,
+    ) -> None:
+        """Refresh region display after a successful edit."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        if self.active_region.id == region_id:
+            self.active_region = region
+
+            start_time, end_time = (
+                self._get_active_region_times()
+            )
+
+            self.region_start = start_time
+            self.region_end = end_time
+
+        self.region_table.set_regions(
+            self.metadata,
+            select_region_id=region_id,
+        )
+
+    def delete_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Delete a non-reserved region."""
+
+        if region_id in self.region_table.RESERVED_REGION_IDS:
+            return
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        # Keep at least the required default region.
+        if len(self.metadata.regions) == 1:
+            return
+
+        was_active = (
+            region is self.active_region
+        )
+
+        self.metadata.regions.remove(
+            region
+        )
+
+        if was_active:
+            self.active_region = (
+                self.metadata.regions[0]
+            )
+
+        self.region_table.set_regions(
+            self.metadata,
+            select_region_id=(
+                self.active_region.id
+                if self.metadata.regions
+                else None
+            ),
         )
 
     # -----------------------------------------------------------------

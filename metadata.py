@@ -143,17 +143,42 @@ def format_seconds_as_time(seconds: float) -> str:
 
     return f"{minutes:02d}:{seconds_text}"
 
-def generate_marker_id(existing_ids: set[str]) -> str:
-    """Generate a unique marker ID in the form mXXX."""
+def generate_random_id(
+    prefix: str,
+    existing_ids: set[str],
+) -> str:
+    """Generate a unique ID using a prefix and three random characters."""
+
     characters = string.ascii_letters + string.digits
 
     while True:
-        marker_id = "m" + "".join(
-            random.choices(characters, k=3)
+        suffix = "".join(
+            random.choices(
+                characters,
+                k=3,
+            )
         )
 
-        if marker_id not in existing_ids:
-            return marker_id
+        candidate = f"{prefix}{suffix}"
+
+        if candidate not in existing_ids:
+            return candidate
+
+def generate_marker_id(
+    existing_ids: set[str],
+) -> str:
+    return generate_random_id(
+        "m",
+        existing_ids,
+    )
+
+def generate_region_id(
+    existing_ids: set[str],
+) -> str:
+    return generate_random_id(
+        "r",
+        existing_ids,
+    )
 
 @dataclass
 class Marker:
