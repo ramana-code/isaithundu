@@ -4,7 +4,9 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QHeaderView,
+    QMenu,
     QTableWidget,
     QTableWidgetItem,
 )
@@ -13,10 +15,15 @@ from metadata import format_seconds_as_time
 
 
 class MarkerTable(QTableWidget):
-    """Display metadata markers in chronological order."""
+    """Display and select metadata markers."""
 
     marker_selected = Signal(str)
     marker_double_clicked = Signal(str)
+
+    # Context-menu actions.
+    recenter_requested = Signal(str)
+    edit_requested = Signal(str)
+    delete_requested = Signal(str)
 
     ID_COLUMN = 0
     TIME_COLUMN = 1
@@ -30,7 +37,6 @@ class MarkerTable(QTableWidget):
             ["ID", "Time", "Label"]
         )
 
-        # Select complete rows with a single click.
         self.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -38,7 +44,6 @@ class MarkerTable(QTableWidget):
             QAbstractItemView.SelectionMode.SingleSelection
         )
 
-        # Editing will be handled by the future double-click editor.
         self.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
@@ -46,8 +51,10 @@ class MarkerTable(QTableWidget):
         # Compact rows.
         self.verticalHeader().setDefaultSectionSize(24)
         self.verticalHeader().setVisible(False)
-        self.setAlternatingRowColors(True)
+
+        # Do not use horizontal separator lines.
         self.setShowGrid(False)
+        self.setAlternatingRowColors(True)
 
         header = self.horizontalHeader()
 
@@ -65,7 +72,7 @@ class MarkerTable(QTableWidget):
         )
         self.setColumnWidth(self.TIME_COLUMN, 125)
 
-        # Label uses the remaining width.
+        # Label gets the remaining space.
         header.setSectionResizeMode(
             self.LABEL_COLUMN,
             QHeaderView.ResizeMode.Stretch,
@@ -78,17 +85,23 @@ class MarkerTable(QTableWidget):
             self._cell_double_clicked
         )
 
+        self.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.customContextMenuRequested.connect(
+            self._show_context_menu
+        )
+
         self._updating = False
 
     @staticmethod
     def _format_time_for_table(marker) -> str:
-        """Format marker time so the MM:SS portion aligns vertically."""
+        """Format time so the MM:SS portion aligns vertically."""
 
         time_text = format_seconds_as_time(marker.seconds)
 
-        # For times under one hour, canonical formatting omits HH.
-        # Add three spaces so the MM portion begins in the same
-        # character position as HH:MM:SS.
+        # For times under one hour, HH is omitted by the canonical
+        # formatter. Add three spaces so MM aligns with HH:MM:SS.
         if marker.seconds < 3600:
             return "   " + time_text
 
@@ -99,7 +112,7 @@ class MarkerTable(QTableWidget):
         markers,
         select_marker_id: str | None = None,
     ) -> None:
-        """Refresh the table, sorted chronologically by marker time."""
+        """Refresh the table, sorted chronologically."""
 
         self._updating = True
 
@@ -134,7 +147,6 @@ class MarkerTable(QTableWidget):
                     getattr(marker, "label", None) or ""
                 )
 
-                # Keep the stable marker ID attached to every cell.
                 for item in (
                     id_item,
                     time_item,
@@ -145,13 +157,12 @@ class MarkerTable(QTableWidget):
                         marker_id,
                     )
 
-                # Keep numeric time available for future operations.
+                # Keep numeric seconds available for future operations.
                 time_item.setData(
                     Qt.ItemDataRole.UserRole + 1,
                     float(marker.seconds),
                 )
 
-                # Monospace font keeps the time characters aligned.
                 time_item.setFont(
                     QFontDatabase.systemFont(
                         QFontDatabase.SystemFont.FixedFont
@@ -168,13 +179,11 @@ class MarkerTable(QTableWidget):
                     self.ID_COLUMN,
                     id_item,
                 )
-
                 self.setItem(
                     row,
                     self.TIME_COLUMN,
                     time_item,
                 )
-
                 self.setItem(
                     row,
                     self.LABEL_COLUMN,
@@ -193,7 +202,7 @@ class MarkerTable(QTableWidget):
         self,
         marker_id: str | None,
     ) -> None:
-        """Select the table row belonging to marker_id."""
+        """Select the row belonging to marker_id."""
 
         if self._updating:
             return
@@ -276,4 +285,71 @@ class MarkerTable(QTableWidget):
             self.marker_double_clicked.emit(
                 str(marker_id)
             )
+
+    def _show_context_menu(self, position) -> None:
+        """Show the marker context menu for the row under the cursor."""
+
+        item = self.itemAt(position)
+
+        if item is None:
+            return
+
+        # Right-click selects the row first.
+        self.selectRow(item.row())
+
+        marker_id = self.selected_marker_id()
+
+        if marker_id is None:
+            return
+
+        menu = QMenu(self)
+
+        recenter_action = menu.addAction(
+            "Recenter waveform"
+        )
+
+        edit_action = menu.addAction(
+            "Edit marker"
+        )
+
+        copy_id_action = menu.addAction(
+            "Copy marker ID"
+        )
+
+        copy_time_action = menu.addAction(
+            "Copy marker time"
+        )
+
+        menu.addSeparator()
+
+        delete_action = menu.addAction(
+            "Delete marker"
+        )
+
+        chosen_action = menu.exec(
+            self.viewport().mapToGlobal(position)
+        )
+
+        if chosen_action == recenter_action:
+            self.recenter_requested.emit(marker_id)
+
+        elif chosen_action == edit_action:
+            self.edit_requested.emit(marker_id)
+
+        elif chosen_action == copy_id_action:
+            QApplication.clipboard().setText(marker_id)
+
+        elif chosen_action == copy_time_action:
+            time_item = self.item(
+                item.row(),
+                self.TIME_COLUMN,
+            )
+
+            if time_item is not None:
+                QApplication.clipboard().setText(
+                    time_item.text().strip()
+                )
+
+        elif chosen_action == delete_action:
+            self.delete_requested.emit(marker_id)
 

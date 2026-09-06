@@ -72,6 +72,38 @@ def main():
 
     marker_table.set_markers(metadata.markers)
 
+    def edit_marker(marker_id: str):
+        print(f"Edit marker: {marker_id}")
+
+    def recenter_waveform(marker_id: str):
+        marker = metadata.markers.get(marker_id)
+
+        if marker is None:
+            return
+
+        waveforms.recenter_on_time(marker.seconds)
+
+    def delete_marker(marker_id: str):
+        if marker_id not in metadata.markers:
+            return
+
+        del metadata.markers[marker_id]
+
+        waveforms.set_markers(metadata)
+        marker_table.set_markers(metadata.markers)
+
+    marker_table.recenter_requested.connect(
+        recenter_waveform
+    )
+
+    marker_table.edit_requested.connect(
+        edit_marker
+    )
+
+    marker_table.delete_requested.connect(
+        delete_marker
+    )
+
     if not metadata.regions:
         raise RuntimeError("The YAML metadata contains no regions.")
 
@@ -101,7 +133,15 @@ def main():
 
     def play_region():
         player.set_loop(loop_checkbox.isChecked())
-        player.play(start_time=region_start, end_time=region_end)
+
+        waveforms.set_playback_position(
+            player.current_time
+        )
+
+        player.play(
+            start_time=region_start,
+            end_time=region_end,
+        )
 
     def pause_playback():
         player.pause()
@@ -109,7 +149,6 @@ def main():
     def stop_playback():
         player.stop()
         waveforms.set_current_time(region_start)
-
 
     def on_waveform_clicked(seconds: float):
         # Markers may be created only when playback is stopped or paused.
@@ -151,7 +190,10 @@ def main():
     position_timer.setInterval(30)
 
     def update_position():
-        waveforms.set_current_time(player.current_time)
+        if player.is_playing:
+            waveforms.set_playback_position(
+                player.current_time
+            )
 
     position_timer.timeout.connect(update_position)
     position_timer.start()

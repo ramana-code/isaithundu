@@ -161,6 +161,7 @@ class WaveformView(pg.PlotWidget):
 
         self.audio: AudioData | None = None
         self.current_time = 0.0
+        self.view_center_time = 0.0
         self.waveform_pyramid: WaveformPyramid | None = None
 
         # Marker graphics keyed by stable marker ID.
@@ -330,8 +331,12 @@ class WaveformView(pg.PlotWidget):
             self.waveform_curve.clear()
             return
 
-        view_start = self.current_time - self.half_window
-        view_end = self.current_time + self.half_window
+        view_start = (
+            self.view_center_time - self.half_window
+        )
+        view_end = (
+            self.view_center_time + self.half_window
+        )
 
         audio_start = max(0.0, view_start)
         audio_end = min(self.audio.duration, view_end)
@@ -417,6 +422,43 @@ class WaveformView(pg.PlotWidget):
 
         super().mousePressEvent(event)
 
+    def set_playback_position(self, current_time: float) -> None:
+        """Set playback position and center the waveform on it."""
+
+        if self.audio is None:
+            return
+
+        self.current_time = max(
+            0.0,
+            min(
+                float(current_time),
+                self.audio.duration,
+            ),
+        )
+
+        self.view_center_time = self.current_time
+
+        self.update_waveform()
+
+    def recenter_on_time(self, seconds: float) -> None:
+        """Move only the waveform view center.
+
+        The audio playback position/playhead is not changed.
+        """
+
+        if self.audio is None:
+            return
+
+        self.view_center_time = max(
+            0.0,
+            min(
+                float(seconds),
+                self.audio.duration,
+            ),
+        )
+
+        self.update_waveform()
+
 class SynchronizedWaveforms(QObject):
     """Manage the two synchronized waveform views."""
 
@@ -492,3 +534,19 @@ class SynchronizedWaveforms(QObject):
     def _waveform_clicked(self, absolute_time: float) -> None:
         """Handle a click from either synchronized waveform."""
         self.waveform_clicked.emit(absolute_time)
+
+    def set_playback_position(
+        self,
+        current_time: float,
+    ) -> None:
+        """Move playback position and center both waveforms."""
+
+        self.top_view.set_playback_position(current_time)
+        self.bottom_view.set_playback_position(current_time)
+
+
+    def recenter_on_time(self, seconds: float) -> None:
+        """Recenter both waveform views without moving playback."""
+
+        self.top_view.recenter_on_time(seconds)
+        self.bottom_view.recenter_on_time(seconds)
