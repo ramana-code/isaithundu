@@ -1,0 +1,584 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QPushButton,
+    QVBoxLayout,
+)
+
+from audio_player import AudioPlayer
+from marker_dialog import MarkerDialog
+from marker_table import MarkerTable
+from metadata import (
+    AudioMetadata,
+    Marker,
+    format_seconds_as_time,
+    generate_marker_id,
+)
+from waveform import SynchronizedWaveforms
+
+
+class PlayerController:
+    """
+    Coordinate the application-level interaction between:
+
+        - metadata
+        - audio
+        - audio player
+        - waveform views
+        - marker table
+        - playback controls
+
+    Individual widgets and data models remain responsible for their
+    own behavior. This class handles the connections between them.
+    """
+
+    POSITION_TIMER_INTERVAL_MS = 30
+
+    def __init__(
+        self,
+        window,
+        metadata: AudioMetadata,
+        audio,
+    ):
+        self.window = window
+        self.metadata = metadata
+        self.audio = audio
+
+        self.player = AudioPlayer()
+        self.player.set_audio(audio)
+
+        self._find_frames()
+        self._create_waveforms()
+        self._create_marker_table()
+        self._create_playback_controls()
+
+        self._initialize_metadata_display()
+        self._connect_signals()
+        self._create_position_timer()
+
+        self._print_audio_information()
+
+    # -----------------------------------------------------------------
+    # Initialization
+    # -----------------------------------------------------------------
+
+    def _find_frames(self) -> None:
+        """Find the application frames defined in Qt Designer."""
+
+        self.top_frame = self.window.findChild(
+            QFrame,
+            "topWaveformFrame",
+        )
+
+        self.bottom_frame = self.window.findChild(
+            QFrame,
+            "bottomWaveformFrame",
+        )
+
+        self.play_frame = self.window.findChild(
+            QFrame,
+            "playFrame",
+        )
+
+        self.marker_frame = self.window.findChild(
+            QFrame,
+            "markerFrame",
+        )
+
+        if (
+            self.top_frame is None
+            or self.bottom_frame is None
+        ):
+            raise RuntimeError(
+                "Could not find waveform frames in the UI."
+            )
+
+        if self.play_frame is None:
+            raise RuntimeError(
+                "Could not find 'playFrame' in the UI."
+            )
+
+        if self.marker_frame is None:
+            raise RuntimeError(
+                "Could not find 'markerFrame' in the UI."
+            )
+
+    def _create_waveforms(self) -> None:
+        """Create and initialize the synchronized waveform views."""
+
+        self.waveforms = SynchronizedWaveforms(
+            self.top_frame,
+            self.bottom_frame,
+        )
+
+        self.waveforms.set_audio(self.audio)
+        self.waveforms.set_markers(self.metadata)
+
+    def _create_marker_table(self) -> None:
+        """Create and install the marker table."""
+
+        self.marker_table = MarkerTable(
+            self.marker_frame
+        )
+
+        layout = self.marker_frame.layout()
+
+        if layout is None:
+            layout = QVBoxLayout(
+                self.marker_frame
+            )
+
+        layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        layout.setSpacing(0)
+        layout.addWidget(self.marker_table)
+
+        self.marker_table.set_markers(
+            self.metadata.markers
+        )
+
+    def _create_playback_controls(self) -> None:
+        """Create the playback controls in playFrame."""
+
+        layout = self.play_frame.layout()
+
+        if layout is None:
+            layout = QHBoxLayout(
+                self.play_frame
+            )
+
+        layout.setContentsMargins(
+            8,
+            8,
+            8,
+            8,
+        )
+        layout.setSpacing(8)
+
+        self.play_button = QPushButton("Play")
+        self.pause_button = QPushButton("Pause")
+        self.stop_button = QPushButton("Stop")
+        self.loop_checkbox = QCheckBox("Loop")
+
+        layout.addWidget(self.play_button)
+        layout.addWidget(self.pause_button)
+        layout.addWidget(self.stop_button)
+        layout.addWidget(self.loop_checkbox)
+        layout.addStretch()
+
+    def _initialize_metadata_display(self) -> None:
+        """Initialize the active playback region and waveform position."""
+
+        if not self.metadata.regions:
+            raise RuntimeError(
+                "The metadata contains no regions."
+            )
+
+        self.active_region = self.metadata.regions[0]
+
+        self.region_start = (
+            self.metadata.get_region_start_seconds(
+                self.active_region
+            )
+        )
+
+        self.region_end = (
+            self.metadata.get_region_end_seconds(
+                self.active_region
+            )
+        )
+
+        self.waveforms.set_current_time(
+            self.region_start
+        )
+
+    def _connect_signals(self) -> None:
+        """Connect UI/widget signals to controller behavior."""
+
+        # Marker table actions.
+        self.marker_table.play_near_marker_requested.connect(
+            self.play_region_near_marker
+        )
+
+        self.marker_table.recenter_requested.connect(
+            self.recenter_graph
+        )
+
+        self.marker_table.edit_requested.connect(
+            self.edit_marker
+        )
+
+        self.marker_table.delete_requested.connect(
+            self.delete_marker
+        )
+
+        self.marker_table.marker_double_clicked.connect(
+            self.edit_marker
+        )
+
+        # Marker movement.
+        self.waveforms.marker_move_finished.connect(
+            self.on_marker_move_finished
+        )
+
+        # Waveform clicks.
+        self.waveforms.waveform_clicked.connect(
+            self.on_waveform_clicked
+        )
+
+        # Marker table selection.
+        self.marker_table.marker_selected.connect(
+            self.select_marker_from_table
+        )
+
+        # Playback controls.
+        self.play_button.clicked.connect(
+            self.play_region
+        )
+
+        self.pause_button.clicked.connect(
+            self.pause_playback
+        )
+
+        self.stop_button.clicked.connect(
+            self.stop_playback
+        )
+
+        self.loop_checkbox.toggled.connect(
+            self.player.set_loop
+        )
+
+    def _create_position_timer(self) -> None:
+        """Create the timer used to synchronize playback state."""
+
+        self.position_timer = QTimer(
+            self.window
+        )
+
+        self.position_timer.setInterval(
+            self.POSITION_TIMER_INTERVAL_MS
+        )
+
+        self.position_timer.timeout.connect(
+            self.update_position
+        )
+
+        self.position_timer.start()
+
+    # -----------------------------------------------------------------
+    # Playback
+    # -----------------------------------------------------------------
+
+    def play_region(self) -> None:
+        """Play the currently active region."""
+
+        self.player.set_loop(
+            self.loop_checkbox.isChecked()
+        )
+
+        self.waveforms.set_playback_position(
+            self.player.current_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=self.region_start,
+            end_time=self.region_end,
+        )
+
+    def pause_playback(self) -> None:
+        """Pause audio playback."""
+
+        self.player.pause()
+
+        self.marker_table.set_playback_active(
+            False
+        )
+
+    def stop_playback(self) -> None:
+        """Stop playback and restore the region start position."""
+
+        self.player.stop()
+
+        self.waveforms.set_current_time(
+            self.region_start
+        )
+
+        self.marker_table.set_playback_active(
+            False
+        )
+
+    def play_region_near_marker(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Play a temporary ten-second window centered on a marker."""
+
+        marker = self.metadata.markers.get(
+            marker_id
+        )
+
+        if marker is None:
+            return
+
+        marker_time = marker.seconds
+
+        start_time = max(
+            0.0,
+            marker_time - 5.0,
+        )
+
+        end_time = min(
+            self.audio.duration,
+            marker_time + 5.0,
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    # -----------------------------------------------------------------
+    # Marker handling
+    # -----------------------------------------------------------------
+
+    def on_waveform_clicked(
+        self,
+        seconds: float,
+    ) -> None:
+        """Create a new marker from a waveform click."""
+
+        if self.player.is_playing:
+            return
+
+        marker_id = generate_marker_id(
+            set(self.metadata.markers)
+        )
+
+        marker = Marker(
+            id=marker_id,
+            time=format_seconds_as_time(seconds),
+        )
+
+        self.metadata.markers[marker_id] = marker
+
+        self.waveforms.set_markers(
+            self.metadata
+        )
+
+        self.marker_table.set_markers(
+            self.metadata.markers,
+            select_marker_id=marker_id,
+        )
+
+        self.waveforms.select_marker(
+            marker_id
+        )
+
+        print(
+            f"Created marker: "
+            f"{marker.id} at {marker.time}"
+        )
+
+    def select_marker_from_table(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Select a marker in both waveform views."""
+
+        self.waveforms.select_marker(
+            marker_id
+        )
+
+    def edit_marker(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Open the marker editor."""
+
+        marker = self.metadata.markers.get(
+            marker_id
+        )
+
+        if marker is None:
+            return
+
+        dialog = MarkerDialog(
+            marker,
+            parent=self.window,
+        )
+
+        if (
+            dialog.exec()
+            == QDialog.DialogCode.Accepted
+        ):
+            self.waveforms.set_markers(
+                self.metadata
+            )
+
+            self.marker_table.set_markers(
+                self.metadata.markers,
+                select_marker_id=marker_id,
+            )
+
+            self.waveforms.select_marker(
+                marker_id
+            )
+
+    def delete_marker(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Delete a marker."""
+
+        if marker_id not in self.metadata.markers:
+            return
+
+        del self.metadata.markers[
+            marker_id
+        ]
+
+        self.waveforms.set_markers(
+            self.metadata
+        )
+
+        self.marker_table.set_markers(
+            self.metadata.markers
+        )
+
+    def recenter_graph(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Center the waveform views on a marker."""
+
+        marker = self.metadata.markers.get(
+            marker_id
+        )
+
+        if marker is None:
+            return
+
+        self.waveforms.recenter_on_time(
+            marker.seconds
+        )
+
+    def on_marker_move_finished(
+        self,
+        marker_id: str,
+        seconds: float,
+    ) -> None:
+        """Commit a completed waveform marker drag."""
+
+        marker = self.metadata.markers.get(
+            marker_id
+        )
+
+        if marker is None:
+            return
+
+        marker.set_time(seconds)
+
+        self.marker_table.set_markers(
+            self.metadata.markers,
+            select_marker_id=marker_id,
+        )
+
+    # -----------------------------------------------------------------
+    # Playback state synchronization
+    # -----------------------------------------------------------------
+
+    def update_position(self) -> None:
+        """
+        Synchronize waveform playback position and
+        interactive-state flags with the actual player.
+        """
+
+        playing = self.player.is_playing
+
+        if playing:
+            self.waveforms.set_playback_position(
+                self.player.current_time
+            )
+
+        self.marker_table.set_playback_active(
+            playing
+        )
+
+        self.waveforms.set_playback_active(
+            playing
+        )
+
+    # -----------------------------------------------------------------
+    # Lifecycle
+    # -----------------------------------------------------------------
+
+    def shutdown(self) -> None:
+        """Release timer and audio resources."""
+
+        self.position_timer.stop()
+        self.player.close()
+
+    # -----------------------------------------------------------------
+    # Diagnostics
+    # -----------------------------------------------------------------
+
+    def _print_audio_information(self) -> None:
+        """Print the same startup diagnostics as the previous main."""
+
+        print("Audio loaded successfully")
+        print("-------------------------")
+        print(
+            f"Audio file    : "
+            f"{self.audio.source_path}"
+        )
+        print(
+            f"Sample rate   : "
+            f"{self.audio.sample_rate:,} Hz"
+        )
+        print(
+            f"Samples       : "
+            f"{len(self.audio.samples):,}"
+        )
+        print(
+            f"Duration      : "
+            f"{self.audio.duration:,.3f} seconds"
+        )
+        print()
+        print("First region")
+        print("------------")
+        print(
+            f"Region        : "
+            f"{self.active_region.display_label}"
+        )
+        print(
+            f"Start         : "
+            f"{self.region_start:.3f} seconds"
+        )
+        print(
+            f"End           : "
+            f"{self.region_end:.3f} seconds"
+        )
+        print(
+            f"Length        : "
+            f"{self.region_end - self.region_start:.3f} seconds"
+        )
+
