@@ -143,6 +143,35 @@ class WaveformPyramid:
         envelope = np.column_stack((minimums, maximums))
         return bin_starts, bin_ends, envelope
 
+class TimeAxisItem(pg.AxisItem):
+    """Display absolute audio time as MM:SS or HH:MM:SS."""
+
+    def tickStrings(self, values, scale, spacing):
+        labels = []
+
+        for value in values:
+            # The waveform can show blank space before the beginning
+            # or after the end of the audio. Don't display negative time.
+            if value < 0:
+                labels.append("")
+                continue
+
+            total_seconds = int(round(value))
+
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+
+            if hours > 0:
+                labels.append(
+                    f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                )
+            else:
+                labels.append(
+                    f"{minutes:02d}:{seconds:02d}"
+                )
+
+        return labels
 
 class WaveformView(pg.PlotWidget):
     """Display an absolute-time portion of an AudioData waveform.
@@ -180,6 +209,13 @@ class WaveformView(pg.PlotWidget):
 
         plot_item = self.getPlotItem()
 
+        plot_item.setAxisItems(
+            {
+                "bottom": TimeAxisItem(
+                    orientation="bottom"
+                )
+            }
+        )
         plot_item.setLabel("bottom", "")
         plot_item.setLabel("left", "")
         plot_item.hideAxis("left")
