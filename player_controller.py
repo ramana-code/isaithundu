@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -290,6 +288,34 @@ class PlayerController:
             self.select_region_from_table
         )
 
+        self.region_table.start_marker_requested.connect(
+            self.select_marker_from_region
+        )
+
+        self.region_table.end_marker_requested.connect(
+            self.select_marker_from_region
+        )
+
+        self.region_table.play_requested.connect(
+            self.play_selected_region
+        )
+
+        self.region_table.loop_requested.connect(
+            self.loop_selected_region
+        )
+
+        self.region_table.edit_requested.connect(
+            self.edit_region
+        )
+
+        self.region_table.delete_requested.connect(
+            self.delete_region
+        )
+
+        self.region_table.region_double_clicked.connect(
+            self.edit_region
+        )
+
         # Playback controls.
         self.play_button.clicked.connect(
             self.play_region
@@ -357,17 +383,12 @@ class PlayerController:
         self.marker_table.set_playback_active(
             True
         )
-
-        start_time = (
-            self.metadata.get_region_start_seconds(
-                self.active_region
-            )
+        self.region_table.set_playback_active(
+            True
         )
 
-        end_time = (
-            self.metadata.get_region_end_seconds(
-                self.active_region
-            )
+        start_time, end_time = (
+            self._get_active_region_times()
         )
 
         self.player.play(
@@ -381,6 +402,9 @@ class PlayerController:
         self.player.pause()
 
         self.marker_table.set_playback_active(
+            False
+        )
+        self.region_table.set_playback_active(
             False
         )
 
@@ -398,6 +422,9 @@ class PlayerController:
         )
 
         self.marker_table.set_playback_active(
+            False
+        )
+        self.region_table.set_playback_active(
             False
         )
 
@@ -427,6 +454,9 @@ class PlayerController:
         )
 
         self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
             True
         )
 
@@ -491,10 +521,167 @@ class PlayerController:
         self,
         region_id: str,
     ) -> None:
-        """Handle region selection."""
+        """Make a region the active playback region."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, _end_time = (
+            self._get_active_region_times()
+        )
+
+        if not self.player.is_playing:
+            self.waveforms.set_current_time(
+                start_time
+            )
+
+    def select_marker_from_region(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Select a marker referenced by the region table."""
+
+        if marker_id not in self.metadata.markers:
+            return
+
+        self.marker_table.select_marker(
+            marker_id
+        )
+
+        self.waveforms.select_marker(
+            marker_id
+        )
+
+    def play_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region once."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(False)
+
+        self.waveforms.set_playback_position(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def loop_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region repeatedly."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(True)
+
+        self.waveforms.set_playback_position(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def edit_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Temporarily report the requested region edit."""
 
         print(
-            f"Selected region: {region_id}"
+            f"Edit region: {region_id}"
+        )
+
+    def delete_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Delete a non-reserved region."""
+
+        if region_id in self.region_table.RESERVED_REGION_IDS:
+            return
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        # Keep at least the required default region.
+        if len(self.metadata.regions) == 1:
+            return
+
+        was_active = (
+            region is self.active_region
+        )
+
+        self.metadata.regions.remove(
+            region
+        )
+
+        if was_active:
+            self.active_region = (
+                self.metadata.regions[0]
+            )
+
+        self.region_table.set_regions(
+            self.metadata,
+            select_region_id=(
+                self.active_region.id
+                if self.metadata.regions
+                else None
+            ),
         )
 
     def edit_marker(
@@ -629,6 +816,10 @@ class PlayerController:
             )
 
         self.marker_table.set_playback_active(
+            playing
+        )
+
+        self.region_table.set_playback_active(
             playing
         )
 

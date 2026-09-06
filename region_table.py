@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
+    QMenu,
     QTableWidget,
     QTableWidgetItem,
 )
@@ -14,6 +15,14 @@ class RegionTable(QTableWidget):
 
     region_selected = Signal(str)
     region_double_clicked = Signal(str)
+
+    start_marker_requested = Signal(str)
+    end_marker_requested = Signal(str)
+
+    play_requested = Signal(str)
+    loop_requested = Signal(str)
+    edit_requested = Signal(str)
+    delete_requested = Signal(str)
 
     ID_COLUMN = 0
     START_MARKER_COLUMN = 1
@@ -98,11 +107,24 @@ class RegionTable(QTableWidget):
             self._selection_changed
         )
 
+        self.cellClicked.connect(
+            self._cell_clicked
+        )
+
         self.cellDoubleClicked.connect(
             self._cell_double_clicked
         )
 
+        self.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+
+        self.customContextMenuRequested.connect(
+            self._show_context_menu
+        )
+
         self._updating = False
+        self._playback_active = False
 
     def set_regions(
         self,
@@ -294,6 +316,127 @@ class RegionTable(QTableWidget):
             f"Duration: {cls._format_time(duration)}"
         )
 
+    def set_playback_active(
+        self,
+        active: bool,
+    ) -> None:
+        """Set whether region actions are available."""
+
+        self._playback_active = bool(active)
+
+    def _cell_clicked(
+        self,
+        row: int,
+        column: int,
+    ) -> None:
+        """Handle clicks on start/end marker IDs."""
+
+        item = self.item(row, column)
+
+        if item is None:
+            return
+
+        if column == self.START_MARKER_COLUMN:
+            marker_id = item.text().strip()
+            if marker_id:
+                self.start_marker_requested.emit(
+                    marker_id
+                )
+
+        elif column == self.END_MARKER_COLUMN:
+            marker_id = item.text().strip()
+            if marker_id:
+                self.end_marker_requested.emit(
+                    marker_id
+                )
+
+    def _show_context_menu(self, position) -> None:
+        """Show the context menu for a region."""
+
+        item = self.itemAt(position)
+
+        if item is None:
+            return
+
+        row = item.row()
+
+        id_item = self.item(
+            row,
+            self.ID_COLUMN,
+        )
+
+        if id_item is None:
+            return
+
+        region_id = id_item.data(
+            Qt.ItemDataRole.UserRole
+        )
+
+        if region_id is None:
+            return
+
+        region_id = str(region_id)
+
+        # Right-click also selects the region.
+        self.selectRow(row)
+
+        menu = QMenu(self)
+
+        play_action = menu.addAction(
+            "Play region"
+        )
+
+        loop_action = menu.addAction(
+            "Loop region"
+        )
+
+        edit_action = menu.addAction(
+            "Edit region"
+        )
+
+        menu.addSeparator()
+
+        delete_action = menu.addAction(
+            "Delete region"
+        )
+
+        play_action.setEnabled(
+            not self._playback_active
+        )
+
+        loop_action.setEnabled(
+            not self._playback_active
+        )
+
+        edit_action.setEnabled(
+            region_id not in self.RESERVED_REGION_IDS
+            and not self._playback_active
+        )
+
+        delete_action.setEnabled(
+            region_id not in self.RESERVED_REGION_IDS
+            and not self._playback_active
+        )
+
+        chosen_action = menu.exec(
+            self.viewport().mapToGlobal(position)
+        )
+
+        if chosen_action is None:
+            return
+
+        if chosen_action == play_action:
+            self.play_requested.emit(region_id)
+
+        elif chosen_action == loop_action:
+            self.loop_requested.emit(region_id)
+
+        elif chosen_action == edit_action:
+            self.edit_requested.emit(region_id)
+
+        elif chosen_action == delete_action:
+            self.delete_requested.emit(region_id)
+
     def select_region(
         self,
         region_id: str | None,
@@ -365,6 +508,11 @@ class RegionTable(QTableWidget):
         row: int,
         column: int,
     ) -> None:
+        """Open the editor for a normal region."""
+
+        if self._playback_active:
+            return
+
         item = self.item(
             row,
             self.ID_COLUMN,
@@ -389,4 +537,3 @@ class RegionTable(QTableWidget):
         self.region_double_clicked.emit(
             region_id
         )
-
