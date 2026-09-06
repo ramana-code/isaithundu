@@ -22,6 +22,11 @@ from metadata import (
     generate_marker_id,
     generate_region_id,
 )
+from pitch_analyzer import (
+    PitchAnalyzer,
+    PitchTrack,
+    create_pitch_analyzer,
+)
 from waveform import SynchronizedWaveforms
 from region_table import RegionTable
 
@@ -42,6 +47,7 @@ class PlayerController:
     """
 
     POSITION_TIMER_INTERVAL_MS = 30
+    PITCH_ANALYZER_BACKEND = "essentia"
 
     def __init__(
         self,
@@ -55,6 +61,8 @@ class PlayerController:
 
         self.player = AudioPlayer()
         self.player.set_audio(audio)
+
+        self._analyze_pitch()
 
         self._find_frames()
         self._create_waveforms()
@@ -123,6 +131,21 @@ class PlayerController:
             raise RuntimeError(
                 "Could not find 'regionFrame' in the UI."
             )
+
+    def _analyze_pitch(self) -> None:
+        """Analyze the complete audio file once."""
+
+        self.pitch_analyzer: PitchAnalyzer = (
+            create_pitch_analyzer(
+                backend=self.PITCH_ANALYZER_BACKEND,
+            )
+        )
+
+        self.pitch_track: PitchTrack = (
+            self.pitch_analyzer.analyze(
+                self.audio
+            )
+        )
 
     def _create_waveforms(self) -> None:
         """Create and initialize the synchronized waveform views."""
@@ -1133,4 +1156,4 @@ class PlayerController:
             f"Length        : "
             f"{self.region_end - self.region_start:.3f} seconds"
         )
-
+        self.pitch_track.print_diagnostics()
