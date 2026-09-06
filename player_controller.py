@@ -68,6 +68,7 @@ class PlayerController:
 
         self._print_audio_information()
 
+
     # -----------------------------------------------------------------
     # Initialization
     # -----------------------------------------------------------------
@@ -497,6 +498,80 @@ class PlayerController:
             end_time=end_time,
         )
 
+    def play_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region once."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(False)
+
+        self.waveforms.set_playback_position(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def loop_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region repeatedly."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(True)
+
+        self.waveforms.set_playback_position(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
     # -----------------------------------------------------------------
     # Marker handling
     # -----------------------------------------------------------------
@@ -758,80 +833,6 @@ class PlayerController:
                 start_time
             )
 
-    def play_selected_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Play a selected region once."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, end_time = (
-            self._get_active_region_times()
-        )
-
-        self.loop_checkbox.setChecked(False)
-
-        self.waveforms.set_playback_position(
-            start_time
-        )
-
-        self.marker_table.set_playback_active(
-            True
-        )
-        self.region_table.set_playback_active(
-            True
-        )
-
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-    def loop_selected_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Play a selected region repeatedly."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, end_time = (
-            self._get_active_region_times()
-        )
-
-        self.loop_checkbox.setChecked(True)
-
-        self.waveforms.set_playback_position(
-            start_time
-        )
-
-        self.marker_table.set_playback_active(
-            True
-        )
-        self.region_table.set_playback_active(
-            True
-        )
-
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
-
     def add_region(self) -> None:
         """Create a new region using existing markers."""
 
@@ -1062,14 +1063,8 @@ class PlayerController:
         )
 
     # -----------------------------------------------------------------
-    # Lifecycle
+    # Controller helpers
     # -----------------------------------------------------------------
-
-    def shutdown(self) -> None:
-        """Release timer and audio resources."""
-
-        self.position_timer.stop()
-        self.player.close()
 
     def _update_marker_delete_state(self) -> None:
         """Update which markers may be deleted."""
@@ -1083,6 +1078,16 @@ class PlayerController:
         self.marker_table.set_non_deletable_marker_ids(
             protected_ids
         )
+
+    # -----------------------------------------------------------------
+    # Lifecycle
+    # -----------------------------------------------------------------
+
+    def shutdown(self) -> None:
+        """Release timer and audio resources."""
+
+        self.position_timer.stop()
+        self.player.close()
 
     # -----------------------------------------------------------------
     # Diagnostics
