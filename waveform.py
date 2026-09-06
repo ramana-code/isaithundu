@@ -182,6 +182,8 @@ class WaveformView(pg.PlotWidget):
     """
 
     clicked = Signal(float)
+    marker_moved = Signal(str, float)
+    marker_move_finished = Signal(str, float)
 
     def __init__(self, window_seconds: float, parent=None):
         super().__init__(parent)
@@ -197,6 +199,9 @@ class WaveformView(pg.PlotWidget):
         # Marker graphics keyed by stable marker ID.
         self.marker_items: dict[str, tuple[pg.InfiniteLine, pg.TextItem]] = {}
         self.selected_marker_id: str | None = None
+        self._dragging_marker_id: str | None = None
+        self.marker_drag_tolerance_pixels = 6
+        self._playback_active = False
 
         # Target visual resolution.
         self.max_display_points = 2500
@@ -332,6 +337,27 @@ class WaveformView(pg.PlotWidget):
                 )
             )
 
+    def set_marker_time(
+        self,
+        marker_id: str,
+        seconds: float,
+    ) -> None:
+        """Move one marker graphic without rebuilding all markers."""
+
+        marker_item = self.marker_items.get(
+            str(marker_id)
+        )
+
+        if marker_item is None:
+            return
+
+        marker_line, label = marker_item
+
+        seconds = float(seconds)
+
+        marker_line.setValue(seconds)
+        label.setPos(seconds, 0.8)
+
     def clear_markers(self) -> None:
         """Remove all marker lines and labels."""
         for marker_line, label in self.marker_items.values():
@@ -452,21 +478,124 @@ class WaveformView(pg.PlotWidget):
         self.playhead.setPos(self.current_time)
 
     def mousePressEvent(self, event) -> None:
-        """Emit the absolute audio time when the waveform is clicked."""
-        if event.button() == Qt.LeftButton and self.audio is not None:
-            scene_pos = self.mapToScene(event.position().toPoint())
-            view_pos = self.getPlotItem().vb.mapSceneToView(scene_pos)
+        """Handle marker dragging or normal marker creation."""
 
-            click_time = float(view_pos.x())
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.audio is not None
+        ):
+            mouse_pos = event.position().toPoint()
+
+            # A click near the selected marker begins a drag.
+            if self._selected_marker_near_mouse(mouse_pos):
+                self._dragging_marker_id = (
+                    self.selected_marker_id
+                )
+
+                event.accept()
+                return
+
+            # Otherwise this is an ordinary marker-creation click.
+            scene_pos = self.mapToScene(mouse_pos)
+            view_pos = (
+                self.getPlotItem()
+                .vb
+                .mapSceneToView(scene_pos)
+            )
 
             click_time = max(
                 0.0,
-                min(click_time, self.audio.duration),
+                min(
+                    float(view_pos.x()),
+                    self.audio.duration,
+                ),
             )
 
             self.clicked.emit(click_time)
 
+            event.accept()
+            return
+
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        """Move the selected marker during a drag."""
+
+        if (
+            self._dragging_marker_id is not None
+            and self.audio is not None
+        ):
+            scene_pos = self.mapToScene(
+                event.position().toPoint()
+            )
+
+            view_pos = (
+                self.getPlotItem()
+                .vb
+                .mapSceneToView(scene_pos)
+            )
+
+            new_time = max(
+                0.0,
+                min(
+                    float(view_pos.x()),
+                    self.audio.duration,
+                ),
+            )
+
+            marker_id = self._dragging_marker_id
+
+            self.set_marker_time(
+                marker_id,
+                new_time,
+            )
+
+            self.marker_moved.emit(
+                marker_id,
+                new_time,
+            )
+
+            event.accept()
+            return
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        """Finish a marker drag."""
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._dragging_marker_id is not None
+            and self.audio is not None
+        ):
+            marker_id = self._dragging_marker_id
+
+            marker_item = self.marker_items.get(
+                marker_id
+            )
+
+            if marker_item is not None:
+                marker_line, _label = marker_item
+
+                final_time = max(
+                    0.0,
+                    min(
+                        float(marker_line.value()),
+                        self.audio.duration,
+                    ),
+                )
+
+                self.marker_move_finished.emit(
+                    marker_id,
+                    final_time,
+                )
+
+            self._dragging_marker_id = None
+
+            event.accept()
+            return
+
+        super().mouseReleaseEvent(event)
 
     def set_playback_position(self, current_time: float) -> None:
         """Set playback position and center the waveform on it."""
@@ -505,6 +634,48 @@ class WaveformView(pg.PlotWidget):
 
         self.update_waveform()
 
+    def set_playback_active(self, active: bool) -> None:
+        """Enable or disable marker dragging during playback."""
+        self._playback_active = bool(active)
+
+    def _selected_marker_near_mouse(
+        self,
+        mouse_pos,
+    ) -> bool:
+        """Return True when the mouse is near the selected marker."""
+
+        if self._playback_active:
+            return False
+
+        marker_id = self.selected_marker_id
+
+        if marker_id is None:
+            return False
+
+        if marker_id in {"m000", "m999"}:
+            return False
+
+        marker_item = self.marker_items.get(marker_id)
+
+        if marker_item is None:
+            return False
+
+        marker_line, _label = marker_item
+        marker_time = float(marker_line.value())
+
+        scene_pos = self.getPlotItem().vb.mapViewToScene(
+            pg.Point(marker_time, 0)
+        )
+
+        local_pos = self.mapFromScene(scene_pos)
+
+        return (
+            abs(
+                local_pos.x() - mouse_pos.x()
+            )
+            <= self.marker_drag_tolerance_pixels
+        )
+
 class SynchronizedWaveforms(QObject):
     """Manage the two synchronized waveform views."""
 
@@ -512,6 +683,8 @@ class SynchronizedWaveforms(QObject):
     BOTTOM_WINDOW_SECONDS = 10.0
 
     waveform_clicked = Signal(float)
+    marker_moved = Signal(str, float)
+    marker_move_finished = Signal(str, float)
 
     def __init__(self, top_frame, bottom_frame):
         super().__init__()
@@ -537,6 +710,22 @@ class SynchronizedWaveforms(QObject):
         )
         self.top_view.clicked.connect(self._waveform_clicked)
         self.bottom_view.clicked.connect(self._waveform_clicked)
+
+        self.top_view.marker_moved.connect(
+            self._marker_moved
+        )
+
+        self.bottom_view.marker_moved.connect(
+            self._marker_moved
+        )
+
+        self.top_view.marker_move_finished.connect(
+            self._marker_move_finished
+        )
+
+        self.bottom_view.marker_move_finished.connect(
+            self._marker_move_finished
+        )
 
     @staticmethod
     def _install_view(frame, view) -> None:
@@ -596,3 +785,44 @@ class SynchronizedWaveforms(QObject):
 
         self.top_view.recenter_on_time(seconds)
         self.bottom_view.recenter_on_time(seconds)
+
+    def _marker_moved(
+        self,
+        marker_id: str,
+        seconds: float,
+    ) -> None:
+        """Keep both waveform views synchronized."""
+
+        self.top_view.set_marker_time(
+            marker_id,
+            seconds,
+        )
+
+        self.bottom_view.set_marker_time(
+            marker_id,
+            seconds,
+        )
+
+        self.marker_moved.emit(
+            marker_id,
+            seconds,
+        )
+
+
+    def _marker_move_finished(
+        self,
+        marker_id: str,
+        seconds: float,
+    ) -> None:
+        """Report completion of a marker drag."""
+
+        self.marker_move_finished.emit(
+            marker_id,
+            seconds,
+        )
+
+    def set_playback_active(self, active: bool) -> None:
+        """Enable or disable marker dragging in both views."""
+
+        self.top_view.set_playback_active(active)
+        self.bottom_view.set_playback_active(active)

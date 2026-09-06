@@ -139,6 +139,22 @@ def main():
         waveforms.set_markers(metadata)
         marker_table.set_markers(metadata.markers)
 
+    def on_marker_move_finished(
+        marker_id: str,
+        seconds: float,
+    ):
+        marker = metadata.markers.get(marker_id)
+
+        if marker is None:
+            return
+
+        marker.set_time(seconds)
+
+        marker_table.set_markers(
+            metadata.markers,
+            select_marker_id=marker_id,
+        )
+
     marker_table.play_near_marker_requested.connect(
         play_region_near_marker
     )
@@ -163,6 +179,10 @@ def main():
     region_start = metadata.get_region_start_seconds(first_region)
     region_end = metadata.get_region_end_seconds(first_region)
     waveforms.set_current_time(region_start)
+
+    waveforms.marker_move_finished.connect(
+        on_marker_move_finished
+    )
 
     player = AudioPlayer()
     player.set_audio(audio)
@@ -253,6 +273,7 @@ def main():
             )
 
         marker_table.set_playback_active(playing)
+        waveforms.set_playback_active(playing)
 
     position_timer.timeout.connect(update_position)
     position_timer.start()
