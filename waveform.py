@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QFont
 
 from audio_loader import AudioData
 
@@ -287,11 +288,15 @@ class WaveformView(pg.PlotWidget):
 
             label_text = getattr(marker, "label", None) or marker_id
             label = pg.TextItem(
-                text=str(label_text),
-                color="#6A1B9A",
+                text=marker_id,
+                color="#777777",
                 anchor=(0, 1),
             )
-            label.setPos(marker_time, 0.98)
+
+            label_font = QFont()
+            label_font.setPointSize(8)
+            label.setFont(label_font)
+            label.setPos(marker_time, 0.8)
 
             self.addItem(marker_line)
             self.addItem(label)
