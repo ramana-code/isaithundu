@@ -210,6 +210,11 @@ class WaveformView(pg.PlotWidget):
 
         plot_item = self.getPlotItem()
 
+        plot_item.setMouseEnabled(
+            x=False,
+            y=False,
+        )
+
         plot_item.setAxisItems(
             {
                 "bottom": TimeAxisItem(
