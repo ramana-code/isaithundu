@@ -16,12 +16,23 @@ from metadata import format_seconds_as_time, parse_time_to_seconds
 class MarkerDialog(QDialog):
     """Dialog for editing a marker's user-editable properties."""
 
-    def __init__(self, marker, parent=None):
+    def __init__(
+        self,
+        marker,
+        parent=None,
+        is_new: bool = False,
+    ):
         super().__init__(parent)
 
         self.marker = marker
+        self.is_new = is_new
 
-        self.setWindowTitle("Edit Marker")
+        title = "Add Marker" if is_new else "Edit Marker"
+
+        self.setWindowTitle(
+            f"{title}: {marker.id}"
+        )
+
         self.setModal(True)
 
         # ---------------------------------------------------------

@@ -135,7 +135,7 @@ class PlayerController:
         self.waveforms.set_markers(self.metadata)
 
     def _create_marker_table(self) -> None:
-        """Create and install the marker table."""
+        """Create and install the marker table and Add Marker button."""
 
         self.marker_table = MarkerTable(
             self.marker_frame
@@ -154,13 +154,30 @@ class PlayerController:
             0,
             0,
         )
-        layout.setSpacing(0)
-        layout.addWidget(self.marker_table)
+
+        layout.setSpacing(4)
+
+        layout.addWidget(
+            self.marker_table
+        )
+
+        self.add_marker_button = QPushButton(
+            "Add Marker"
+        )
+
+        layout.addWidget(
+            self.add_marker_button
+        )
 
         self.marker_table.set_markers(
             self.metadata.markers
         )
+
         self._update_marker_delete_state()
+
+        self.add_marker_button.clicked.connect(
+            self.add_marker_at_current_position
+        )
 
     def _create_region_table(self) -> None:
         """Create and install the region table and Add Region button."""
@@ -516,6 +533,56 @@ class PlayerController:
         self.waveforms.select_marker(
             marker_id
         )
+
+        print(
+            f"Created marker: "
+            f"{marker.id} at {marker.time}"
+        )
+
+    def add_marker_at_current_position(self) -> None:
+        """Create a marker at the current player position."""
+
+        if self.player.is_playing:
+            return
+
+        seconds = self.player.current_time
+
+        marker_id = generate_marker_id(
+            set(self.metadata.markers)
+        )
+
+        # Temporary marker. It is not added to metadata
+        # until the user accepts the dialog.
+        marker = Marker(
+            id=marker_id,
+            time=format_seconds_as_time(seconds),
+        )
+
+        dialog = MarkerDialog(
+            marker,
+            parent=self.window,
+            is_new=True,
+        )
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.metadata.markers[marker_id] = marker
+
+        self.waveforms.set_markers(
+            self.metadata
+        )
+
+        self.marker_table.set_markers(
+            self.metadata.markers,
+            select_marker_id=marker_id,
+        )
+
+        self.waveforms.select_marker(
+            marker_id
+        )
+
+        self._update_marker_delete_state()
 
         print(
             f"Created marker: "
@@ -984,6 +1051,14 @@ class PlayerController:
 
         self.waveforms.set_playback_active(
             playing
+        )
+
+        self.add_marker_button.setEnabled(
+            not playing
+        )
+
+        self.add_region_button.setEnabled(
+            not playing
         )
 
     # -----------------------------------------------------------------
