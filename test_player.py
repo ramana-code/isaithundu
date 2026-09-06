@@ -77,6 +77,30 @@ def main():
 
     marker_table.set_markers(metadata.markers)
 
+    def play_region_near_marker(marker_id: str):
+        marker = metadata.markers.get(marker_id)
+
+        if marker is None:
+            return
+
+        marker_time = marker.seconds
+
+        start_time = max(
+            0.0,
+            marker_time - 5.0,
+        )
+
+        end_time = min(
+            audio.duration,
+            marker_time + 5.0,
+        )
+        marker_table.set_playback_active(True)
+
+        player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
     def edit_marker(marker_id: str):
         marker = metadata.markers.get(marker_id)
 
@@ -114,6 +138,10 @@ def main():
 
         waveforms.set_markers(metadata)
         marker_table.set_markers(metadata.markers)
+
+    marker_table.play_near_marker_requested.connect(
+        play_region_near_marker
+    )
 
     marker_table.recenter_requested.connect(
         recenter_waveform
@@ -161,6 +189,7 @@ def main():
         waveforms.set_playback_position(
             player.current_time
         )
+        marker_table.set_playback_active(True)
 
         player.play(
             start_time=region_start,
@@ -169,10 +198,12 @@ def main():
 
     def pause_playback():
         player.pause()
+        marker_table.set_playback_active(False)
 
     def stop_playback():
         player.stop()
         waveforms.set_current_time(region_start)
+        marker_table.set_playback_active(False)
 
     def on_waveform_clicked(seconds: float):
         # Markers may be created only when playback is stopped or paused.
@@ -214,10 +245,14 @@ def main():
     position_timer.setInterval(30)
 
     def update_position():
-        if player.is_playing:
+        playing = player.is_playing
+
+        if playing:
             waveforms.set_playback_position(
                 player.current_time
             )
+
+        marker_table.set_playback_active(playing)
 
     position_timer.timeout.connect(update_position)
     position_timer.start()

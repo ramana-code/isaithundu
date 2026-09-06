@@ -24,6 +24,7 @@ class MarkerTable(QTableWidget):
     recenter_requested = Signal(str)
     edit_requested = Signal(str)
     delete_requested = Signal(str)
+    play_near_marker_requested = Signal(str)
 
     ID_COLUMN = 0
     TIME_COLUMN = 1
@@ -35,6 +36,7 @@ class MarkerTable(QTableWidget):
         super().__init__(parent)
 
         self.setColumnCount(3)
+        self._playback_active = False
         self.setHorizontalHeaderLabels(
             ["ID", "Time", "Label"]
         )
@@ -271,6 +273,10 @@ class MarkerTable(QTableWidget):
         row: int,
         column: int,
     ) -> None:
+        # Editing is not allowed during playback.
+        if self._playback_active:
+            return
+
         item = self.item(
             row,
             self.ID_COLUMN,
@@ -288,6 +294,7 @@ class MarkerTable(QTableWidget):
 
         marker_id = str(marker_id)
 
+        # Reserved markers cannot be edited.
         if marker_id in self.RESERVED_MARKER_IDS:
             return
 
@@ -311,8 +318,18 @@ class MarkerTable(QTableWidget):
 
         menu = QMenu(self)
 
+        play_near_marker_action = menu.addAction(
+            "Play near marker"
+        )
+        play_near_marker_action.setEnabled(
+            not self._playback_active
+        )
+
         recenter_action = menu.addAction(
             "Recenter graph"
+        )
+        recenter_action.setEnabled(
+            not self._playback_active
         )
 
         edit_action = menu.addAction(
@@ -320,6 +337,7 @@ class MarkerTable(QTableWidget):
         )
         edit_action.setEnabled(
             marker_id not in self.RESERVED_MARKER_IDS
+            and not self._playback_active
         )
 
         copy_id_action = menu.addAction(
@@ -337,13 +355,17 @@ class MarkerTable(QTableWidget):
         )
         delete_action.setEnabled(
             marker_id not in self.RESERVED_MARKER_IDS
+            and not self._playback_active
         )
 
         chosen_action = menu.exec(
             self.viewport().mapToGlobal(position)
         )
 
-        if chosen_action == recenter_action:
+        if chosen_action == play_near_marker_action:
+            self.play_near_marker_requested.emit(marker_id)
+
+        elif chosen_action == recenter_action:
             self.recenter_requested.emit(marker_id)
 
         elif chosen_action == edit_action:
@@ -366,3 +388,6 @@ class MarkerTable(QTableWidget):
         elif chosen_action == delete_action:
             self.delete_requested.emit(marker_id)
 
+    def set_playback_active(self, active: bool) -> None:
+        """Set whether playback is currently active."""
+        self._playback_active = bool(active)
