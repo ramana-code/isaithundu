@@ -22,6 +22,7 @@ from metadata import (
     generate_marker_id,
 )
 from waveform import SynchronizedWaveforms
+from region_table import RegionTable
 
 
 class PlayerController:
@@ -57,6 +58,7 @@ class PlayerController:
         self._find_frames()
         self._create_waveforms()
         self._create_marker_table()
+        self._create_region_table()
         self._create_playback_controls()
 
         self._initialize_metadata_display()
@@ -92,6 +94,11 @@ class PlayerController:
             "markerFrame",
         )
 
+        self.region_frame = self.window.findChild(
+            QFrame,
+            "regionFrame",
+        )
+
         if (
             self.top_frame is None
             or self.bottom_frame is None
@@ -108,6 +115,11 @@ class PlayerController:
         if self.marker_frame is None:
             raise RuntimeError(
                 "Could not find 'markerFrame' in the UI."
+            )
+
+        if self.region_frame is None:
+            raise RuntimeError(
+                "Could not find 'regionFrame' in the UI."
             )
 
     def _create_waveforms(self) -> None:
@@ -148,6 +160,37 @@ class PlayerController:
             self.metadata.markers
         )
         self._update_marker_delete_state()
+
+    def _create_region_table(self) -> None:
+        """Create and install the region table."""
+
+        self.region_table = RegionTable(
+            self.region_frame
+        )
+
+        layout = self.region_frame.layout()
+
+        if layout is None:
+            layout = QVBoxLayout(
+                self.region_frame
+            )
+
+        layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        layout.setSpacing(0)
+
+        layout.addWidget(
+            self.region_table
+        )
+
+        self.region_table.set_regions(
+            self.metadata
+        )
 
     def _create_playback_controls(self) -> None:
         """Create the playback controls in playFrame."""
@@ -241,6 +284,10 @@ class PlayerController:
         # Marker table selection.
         self.marker_table.marker_selected.connect(
             self.select_marker_from_table
+        )
+
+        self.region_table.region_selected.connect(
+            self.select_region_from_table
         )
 
         # Playback controls.
@@ -440,6 +487,16 @@ class PlayerController:
             marker_id
         )
 
+    def select_region_from_table(
+        self,
+        region_id: str,
+    ) -> None:
+        """Handle region selection."""
+
+        print(
+            f"Selected region: {region_id}"
+        )
+
     def edit_marker(
         self,
         marker_id: str,
@@ -548,6 +605,10 @@ class PlayerController:
         self.marker_table.set_markers(
             self.metadata.markers,
             select_marker_id=marker_id,
+        )
+
+        self.region_table.set_regions(
+            self.metadata
         )
 
     # -----------------------------------------------------------------
