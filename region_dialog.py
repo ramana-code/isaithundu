@@ -16,13 +16,25 @@ from PySide6.QtWidgets import (
 class RegionDialog(QDialog):
     """Dialog for editing an existing metadata region."""
 
-    def __init__(self, region, metadata, parent=None):
+    def __init__(
+        self,
+        region,
+        metadata,
+        parent=None,
+        is_new: bool = False,
+    ):
         super().__init__(parent)
 
         self.region = region
         self.metadata = metadata
+        self.is_new = is_new
 
-        self.setWindowTitle(f"Edit Region: {region.id}")
+        title = "Add Region" if is_new else "Edit Region"
+
+        self.setWindowTitle(
+            f"{title}: {region.id}"
+        )
+
         self.setModal(True)
 
         self._build_ui()

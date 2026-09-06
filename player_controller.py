@@ -838,6 +838,7 @@ class PlayerController:
             region,
             self.metadata,
             parent=self.window,
+            is_new=True,
         )
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -876,6 +877,7 @@ class PlayerController:
             region,
             self.metadata,
             parent=self.window,
+            is_new=False,
         )
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
