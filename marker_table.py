@@ -29,6 +29,8 @@ class MarkerTable(QTableWidget):
     TIME_COLUMN = 1
     LABEL_COLUMN = 2
 
+    RESERVED_MARKER_IDS = {"m000", "m999"}
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -281,10 +283,15 @@ class MarkerTable(QTableWidget):
             Qt.ItemDataRole.UserRole
         )
 
-        if marker_id is not None:
-            self.marker_double_clicked.emit(
-                str(marker_id)
-            )
+        if marker_id is None:
+            return
+
+        marker_id = str(marker_id)
+
+        if marker_id in self.RESERVED_MARKER_IDS:
+            return
+
+        self.marker_double_clicked.emit(marker_id)
 
     def _show_context_menu(self, position) -> None:
         """Show the marker context menu for the row under the cursor."""
@@ -305,11 +312,14 @@ class MarkerTable(QTableWidget):
         menu = QMenu(self)
 
         recenter_action = menu.addAction(
-            "Recenter waveform"
+            "Recenter graph"
         )
 
         edit_action = menu.addAction(
             "Edit marker"
+        )
+        edit_action.setEnabled(
+            marker_id not in self.RESERVED_MARKER_IDS
         )
 
         copy_id_action = menu.addAction(
@@ -324,6 +334,9 @@ class MarkerTable(QTableWidget):
 
         delete_action = menu.addAction(
             "Delete marker"
+        )
+        delete_action.setEnabled(
+            marker_id not in self.RESERVED_MARKER_IDS
         )
 
         chosen_action = menu.exec(

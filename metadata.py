@@ -247,6 +247,85 @@ class AudioMetadata:
         return marker.seconds
 
 
+    def ensure_default_markers_and_region(
+        self,
+        audio_duration: float,
+    ) -> None:
+        """
+        Ensure the application-defined boundary markers and full-track
+        region exist and have the correct structural values.
+
+        Defaults:
+            m000 -> 00:00
+            m999 -> audio.duration
+            rall -> m000 to m999
+
+        If an object already exists, its label and description are preserved,
+        while its structural time/reference values are corrected.
+        """
+
+        if audio_duration < 0:
+            raise ValueError("Audio duration cannot be negative.")
+
+        # ---------------------------------------------------------
+        # Default start marker
+        # ---------------------------------------------------------
+
+        if "m000" in self.markers:
+            start_marker = self.markers["m000"]
+            start_marker.set_time(0.0)
+        else:
+            self.markers["m000"] = Marker(
+                id="m000",
+                time="00:00",
+                label="Start",
+                description="Beginning of the audio track.",
+            )
+
+        # ---------------------------------------------------------
+        # Default end marker
+        # ---------------------------------------------------------
+
+        if "m999" in self.markers:
+            end_marker = self.markers["m999"]
+            end_marker.set_time(audio_duration)
+        else:
+            end_marker = Marker(
+                id="m999",
+                time="00:00",
+                label="End",
+                description="End of the audio track.",
+            )
+            end_marker.set_time(audio_duration)
+            self.markers["m999"] = end_marker
+
+        # ---------------------------------------------------------
+        # Default full-track region
+        # ---------------------------------------------------------
+
+        existing_region = next(
+            (
+                region
+                for region in self.regions
+                if region.id == "rall"
+            ),
+            None,
+        )
+
+        if existing_region is not None:
+            existing_region.start = "m000"
+            existing_region.end = "m999"
+        else:
+            self.regions.append(
+                Region(
+                    id="rall",
+                    start="m000",
+                    end="m999",
+                    label="All",
+                    description="The complete audio track.",
+                )
+            )
+
 class MetadataParser:
     """
     Load an AudioMetadata object from a YAML file.

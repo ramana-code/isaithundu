@@ -6,6 +6,7 @@ from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDialog,
     QFrame,
     QHBoxLayout,
     QVBoxLayout,
@@ -21,6 +22,7 @@ from metadata import (
     generate_marker_id,
 )
 from marker_table import MarkerTable
+from marker_dialog import MarkerDialog
 from waveform import SynchronizedWaveforms
 
 YAML_PATH = Path("mohananga.yaml")
@@ -40,6 +42,9 @@ def main():
     metadata = MetadataParser().load(str(YAML_PATH))
     audio_path = YAML_PATH.parent / metadata.audio_filename
     audio = AudioLoader().load(audio_path)
+    metadata.ensure_default_markers_and_region(
+        audio.duration
+    )
 
     top_frame = window.findChild(QFrame, "topWaveformFrame")
     bottom_frame = window.findChild(QFrame, "bottomWaveformFrame")
@@ -73,7 +78,25 @@ def main():
     marker_table.set_markers(metadata.markers)
 
     def edit_marker(marker_id: str):
-        print(f"Edit marker: {marker_id}")
+        marker = metadata.markers.get(marker_id)
+
+        if marker is None:
+            return
+
+        dialog = MarkerDialog(
+            marker,
+            parent=window,
+        )
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            waveforms.set_markers(metadata)
+
+            marker_table.set_markers(
+                metadata.markers,
+                select_marker_id=marker_id,
+            )
+
+            waveforms.select_marker(marker_id)
 
     def recenter_waveform(marker_id: str):
         marker = metadata.markers.get(marker_id)
@@ -104,8 +127,9 @@ def main():
         delete_marker
     )
 
-    if not metadata.regions:
-        raise RuntimeError("The YAML metadata contains no regions.")
+    marker_table.marker_double_clicked.connect(
+        edit_marker
+    )
 
     first_region = metadata.regions[0]
     region_start = metadata.get_region_start_seconds(first_region)
