@@ -326,6 +326,21 @@ class AudioMetadata:
                 )
             )
 
+    def regions_using_marker(
+        self,
+        marker_id: str,
+    ) -> list[Region]:
+        """Return all regions that reference a marker."""
+
+        marker_id = str(marker_id)
+
+        return [
+            region
+            for region in self.regions
+            if region.start == marker_id
+            or region.end == marker_id
+        ]
+
 class MetadataParser:
     """
     Load an AudioMetadata object from a YAML file.

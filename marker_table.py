@@ -40,6 +40,7 @@ class MarkerTable(QTableWidget):
         self.setHorizontalHeaderLabels(
             ["ID", "Time", "Label"]
         )
+        self._non_deletable_marker_ids = set()
 
         self.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
@@ -355,6 +356,7 @@ class MarkerTable(QTableWidget):
         )
         delete_action.setEnabled(
             marker_id not in self.RESERVED_MARKER_IDS
+            and marker_id not in self._non_deletable_marker_ids
             and not self._playback_active
         )
 
@@ -391,3 +393,14 @@ class MarkerTable(QTableWidget):
     def set_playback_active(self, active: bool) -> None:
         """Set whether playback is currently active."""
         self._playback_active = bool(active)
+
+    def set_non_deletable_marker_ids(
+        self,
+        marker_ids: set[str],
+    ) -> None:
+        """Set marker IDs that must not be deletable."""
+
+        self._non_deletable_marker_ids = {
+            str(marker_id)
+            for marker_id in marker_ids
+        }

@@ -147,6 +147,7 @@ class PlayerController:
         self.marker_table.set_markers(
             self.metadata.markers
         )
+        self._update_marker_delete_state()
 
     def _create_playback_controls(self) -> None:
         """Create the playback controls in playFrame."""
@@ -280,6 +281,21 @@ class PlayerController:
     # Playback
     # -----------------------------------------------------------------
 
+    def _get_active_region_times(
+        self,
+    ) -> tuple[float, float]:
+        """Resolve the current start and end times of the active region."""
+
+        start_time = self.metadata.get_region_start_seconds(
+            self.active_region
+        )
+
+        end_time = self.metadata.get_region_end_seconds(
+            self.active_region
+        )
+
+        return start_time, end_time
+
     def play_region(self) -> None:
         """Play the currently active region."""
 
@@ -295,9 +311,21 @@ class PlayerController:
             True
         )
 
+        start_time = (
+            self.metadata.get_region_start_seconds(
+                self.active_region
+            )
+        )
+
+        end_time = (
+            self.metadata.get_region_end_seconds(
+                self.active_region
+            )
+        )
+
         self.player.play(
-            start_time=self.region_start,
-            end_time=self.region_end,
+            start_time=start_time,
+            end_time=end_time,
         )
 
     def pause_playback(self) -> None:
@@ -310,12 +338,16 @@ class PlayerController:
         )
 
     def stop_playback(self) -> None:
-        """Stop playback and restore the region start position."""
+        """Stop playback and return to the active region start."""
 
         self.player.stop()
 
+        start_time, _end_time = (
+            self._get_active_region_times()
+        )
+
         self.waveforms.set_current_time(
-            self.region_start
+            start_time
         )
 
         self.marker_table.set_playback_active(
@@ -447,14 +479,30 @@ class PlayerController:
         self,
         marker_id: str,
     ) -> None:
-        """Delete a marker."""
+        """Delete a marker that is not referenced by any region."""
 
         if marker_id not in self.metadata.markers:
             return
 
-        del self.metadata.markers[
-            marker_id
-        ]
+        dependent_regions = (
+            self.metadata.regions_using_marker(
+                marker_id
+            )
+        )
+
+        if dependent_regions:
+            region_ids = ", ".join(
+                region.id
+                for region in dependent_regions
+            )
+
+            print(
+                f"Cannot delete marker '{marker_id}': "
+                f"it is used by region(s) {region_ids}."
+            )
+            return
+
+        del self.metadata.markers[marker_id]
 
         self.waveforms.set_markers(
             self.metadata
@@ -536,6 +584,19 @@ class PlayerController:
 
         self.position_timer.stop()
         self.player.close()
+
+    def _update_marker_delete_state(self) -> None:
+        """Update which markers may be deleted."""
+
+        protected_ids = set()
+
+        for region in self.metadata.regions:
+            protected_ids.add(region.start)
+            protected_ids.add(region.end)
+
+        self.marker_table.set_non_deletable_marker_ids(
+            protected_ids
+        )
 
     # -----------------------------------------------------------------
     # Diagnostics
