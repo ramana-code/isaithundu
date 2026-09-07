@@ -20,6 +20,7 @@ from metadata import (
     AudioMetadata,
     Marker,
     Region,
+    MetadataParser,
     format_seconds_as_time,
     generate_marker_id,
     generate_region_id,
@@ -37,6 +38,7 @@ from pitch_mapper import (
     PitchSystem,
 )
 from pitch_view import PitchView
+from scale_registry import ScaleRegistry
 
 
 class PlayerController:
@@ -59,15 +61,12 @@ class PlayerController:
     # Temporary development pitch settings.
     # Sruthi and cents will eventually come from YAML metadata.
     PITCH_ANALYZER_BACKEND = "essentia"
-    PITCH_SRUTHI = "A#3"
-    PITCH_SRUTHI_CENTS = -2.0
 
     # The raga definitions are maintained independently of librosa.
     SCALE_DATABASE_PATHS = (
         Path("data/melakarta.yaml"),
         Path("data/janyaragas.yaml"),
     )
-    PITCH_RAGA_ID = "tilang"
 
     def __init__(
         self,
@@ -81,6 +80,10 @@ class PlayerController:
 
         self.player = AudioPlayer()
         self.player.set_audio(audio)
+
+        self.scale_registry = ScaleRegistry(
+            self.SCALE_DATABASE_PATHS
+        )
 
         self._analyze_pitch()
 
@@ -176,14 +179,8 @@ class PlayerController:
 
         sa_frequency_hz = self._calculate_sa_frequency()
 
-        from scale_registry import ScaleRegistry
-
-        self.scale_registry = ScaleRegistry(
-            self.SCALE_DATABASE_PATHS
-        )
-
         scale = self.scale_registry.get(
-            self.PITCH_RAGA_ID
+            self.metadata.raga
         )
 
         pitch_system = PitchSystem(
@@ -201,17 +198,19 @@ class PlayerController:
         )
 
     def _calculate_sa_frequency(self) -> float:
-        """Calculate the temporary development Sa frequency."""
+        """Calculate Sa from the YAML sruthi and cents metadata."""
 
         import librosa
 
         reference_hz = float(
-            librosa.note_to_hz(self.PITCH_SRUTHI)
+            librosa.note_to_hz(
+                self.metadata.sruthi
+            )
         )
 
         return reference_hz * (
             2.0 ** (
-                self.PITCH_SRUTHI_CENTS / 1200.0
+                self.metadata.cents / 1200.0
             )
         )
 

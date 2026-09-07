@@ -3,6 +3,9 @@ schema_version: "1.1.0"
 
 target_audio:
   file_name: "mohananga.mp3"
+  sruthi: "A#3"
+  cents: -2
+  raga: "tilang"
 
 markers:
   - id: "pos1"

@@ -3,6 +3,7 @@ from typing import Optional
 import yaml
 import random
 import string
+import re
 
 def parse_time_to_seconds(time_value) -> float:
     """
@@ -238,6 +239,9 @@ class AudioMetadata:
     audio_filename: str
     markers: dict[str, Marker]
     regions: list[Region]
+    sruthi: str = "E3"
+    cents: float = 0.0
+    raga: str = "melakarta_029"
 
     def get_marker(self, marker_id: str) -> Optional[Marker]:
         return self.markers.get(marker_id)
@@ -409,6 +413,10 @@ class MetadataParser:
                 "Missing 'target_audio.file_name'."
             )
 
+        sruthi, cents, raga = self._parse_pitch_metadata(
+            target_audio
+        )
+
         markers = self._parse_markers(
             data.get("markers", [])
         )
@@ -424,7 +432,83 @@ class MetadataParser:
             audio_filename=audio_filename,
             markers=markers,
             regions=regions,
+            sruthi=sruthi,
+            cents=cents,
+            raga=raga,
         )
+
+    @staticmethod
+    def _parse_pitch_metadata(
+        target_audio: dict,
+    ) -> tuple[str, float, str]:
+        """Parse pitch-analysis settings from target_audio."""
+
+        sruthi_value = target_audio.get(
+            "sruthi",
+            "E3",
+        )
+
+        if not isinstance(sruthi_value, str):
+            raise ValueError(
+                "'target_audio.sruthi' must be a string."
+            )
+
+        sruthi = sruthi_value.strip()
+
+        if not re.fullmatch(
+            r"[A-Ga-g](?:#)?[0-9]",
+            sruthi,
+        ):
+            raise ValueError(
+                "Invalid 'target_audio.sruthi'. Expected a Western "
+                "note with octave, such as 'G3' or 'C#4'."
+            )
+
+        sruthi = (
+            sruthi[0].upper()
+            + sruthi[1:]
+        )
+
+        cents_value = target_audio.get(
+            "cents",
+            0.0,
+        )
+
+        if isinstance(cents_value, bool):
+            raise ValueError(
+                "'target_audio.cents' must be numeric."
+            )
+
+        try:
+            cents = float(cents_value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "'target_audio.cents' must be numeric."
+            ) from None
+
+        if not -50.0 <= cents <= 50.0:
+            raise ValueError(
+                "'target_audio.cents' must be between -50 and +50."
+            )
+
+        raga_value = target_audio.get(
+            "raga",
+            "melakarta_029",
+        )
+
+        if not isinstance(raga_value, str):
+            raise ValueError(
+                "'target_audio.raga' must be a string."
+            )
+
+        raga = raga_value.strip()
+
+        if not raga:
+            raise ValueError(
+                "'target_audio.raga' must not be empty."
+            )
+
+        return sruthi, cents, raga
 
     def _parse_markers(self, marker_data) -> dict[str, Marker]:
         if not isinstance(marker_data, list):
@@ -572,9 +656,9 @@ class MetadataSerializer:
         return {
             "file_format": metadata.file_format,
             "schema_version": metadata.schema_version,
-            "target_audio": {
-                "file_name": metadata.audio_filename,
-            },
+            "target_audio": self._serialize_target_audio(
+                metadata
+            ),
             "markers": [
                 self._serialize_marker(marker)
                 for marker in metadata.markers.values()
@@ -583,6 +667,26 @@ class MetadataSerializer:
                 self._serialize_region(region)
                 for region in metadata.regions
             ],
+        }
+
+    @staticmethod
+    def _serialize_target_audio(
+        metadata: AudioMetadata,
+    ) -> dict:
+        """Build the target_audio YAML mapping."""
+
+        cents = float(metadata.cents)
+
+        if cents.is_integer():
+            cents_value = int(cents)
+        else:
+            cents_value = cents
+
+        return {
+            "file_name": metadata.audio_filename,
+            "sruthi": metadata.sruthi,
+            "cents": cents_value,
+            "raga": metadata.raga,
         }
 
     def _serialize_marker(self, marker: Marker) -> dict:
