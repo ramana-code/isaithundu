@@ -265,8 +265,8 @@ class PlayerController:
 
         self.sruthi_octave_spin = QSpinBox()
         self.sruthi_octave_spin.setRange(
-            -1,
-            9,
+            2,
+            4,
         )
 
         sruthi = self.metadata.sruthi
@@ -350,6 +350,14 @@ class PlayerController:
         # ---------------------------------------------------------
 
         save_layout = QHBoxLayout()
+
+        self.apply_tuning_button = QPushButton(
+            "Apply"
+        )
+
+        save_layout.addWidget(
+            self.apply_tuning_button
+        )
 
         self.save_button = QPushButton(
             "Save"
@@ -709,20 +717,16 @@ class PlayerController:
             self.player.set_loop
         )
 
-        self.sruthi_note_combo.currentTextChanged.connect(
-            self._on_sruthi_changed
-        )
-
-        self.sruthi_octave_spin.valueChanged.connect(
-            self._on_sruthi_changed
-        )
-
         self.cents_slider.valueChanged.connect(
-            self._on_cents_changed
+            self._sync_cents_spinbox
         )
 
         self.cents_spin.valueChanged.connect(
-            self._on_cents_changed
+            self._sync_cents_slider
+        )
+
+        self.apply_tuning_button.clicked.connect(
+            self._apply_tuning
         )
 
         self.save_button.clicked.connect(
@@ -758,35 +762,43 @@ class PlayerController:
             f"{self.sruthi_octave_spin.value()}"
         )
 
-    def _on_sruthi_changed(self) -> None:
-        """Apply a changed Sruthi without reanalyzing the audio."""
-
-        sruthi = self._get_sruthi_text()
-
-        if sruthi == self.metadata.sruthi:
-            return
-
-        self.metadata.sruthi = sruthi
-
-        self._remap_pitch()
-
-    def _on_cents_changed(self, value: int) -> None:
-        """Keep the cents controls synchronized and remap the pitch."""
-
-        value = int(value)
-
-        if self.cents_slider.value() != value:
-            self.cents_slider.setValue(value)
+    def _sync_cents_spinbox(
+        self,
+        value: int,
+    ) -> None:
+        """Keep the cents spin box synchronized with the slider."""
 
         if self.cents_spin.value() != value:
             self.cents_spin.setValue(value)
 
-        new_cents = float(value)
 
-        if self.metadata.cents == new_cents:
+    def _sync_cents_slider(
+        self,
+        value: int,
+    ) -> None:
+        """Keep the cents slider synchronized with the spin box."""
+
+        if self.cents_slider.value() != value:
+            self.cents_slider.setValue(value)
+
+    def _apply_tuning(self) -> None:
+        """Apply the current tuning controls to the pitch mapping."""
+
+        sruthi = self._get_sruthi_text()
+        cents = float(
+            self.cents_spin.value()
+        )
+
+        changed = (
+            sruthi != self.metadata.sruthi
+            or cents != self.metadata.cents
+        )
+
+        if not changed:
             return
 
-        self.metadata.cents = new_cents
+        self.metadata.sruthi = sruthi
+        self.metadata.cents = cents
 
         self._remap_pitch()
 
