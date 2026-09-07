@@ -306,7 +306,7 @@ class WaveformView(pg.PlotWidget):
             label_font = QFont()
             label_font.setPointSize(8)
             label.setFont(label_font)
-            label.setPos(marker_time, 0.8)
+            label.setPos(marker_time, 0.70)
 
             self.addItem(marker_line)
             self.addItem(label)
@@ -356,7 +356,7 @@ class WaveformView(pg.PlotWidget):
         seconds = float(seconds)
 
         marker_line.setValue(seconds)
-        label.setPos(seconds, 0.8)
+        label.setPos(seconds, 0.70)
 
     def clear_markers(self) -> None:
         """Remove all marker lines and labels."""
