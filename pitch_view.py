@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pyqtgraph as pg
 
@@ -7,10 +9,12 @@ from pitch_mapper import MappedPitchTrack, PitchMapper
 
 
 class PitchView(pg.PlotWidget):
-    """Display a mapped pitch track on an absolute audio timeline.
+    """Display mapped pitch on an absolute audio timeline.
 
-    Y is cents relative to Sa, so the display axis is linear.
-    The playhead stays at the center while the absolute-time data scrolls.
+    The underlying Y coordinate is cents relative to Sa. All plot axes are
+    hidden so the plotting area can align horizontally with the waveform.
+    Svara names are drawn directly inside the plot at their reference lines.
+    The playback playhead remains fixed at the center of the visible window.
     """
 
     DEFAULT_WINDOW_SECONDS = 10.0
@@ -23,42 +27,64 @@ class PitchView(pg.PlotWidget):
         super().__init__(parent)
 
         self.window_seconds = float(window_seconds)
-        if self.window_seconds <= 0.0:
-            raise ValueError("window_seconds must be positive.")
 
-        self.half_window = self.window_seconds / 2.0
+        if self.window_seconds <= 0.0:
+            raise ValueError(
+                "window_seconds must be positive."
+            )
+
+        self.half_window = (
+            self.window_seconds / 2.0
+        )
+
         self.current_time = 0.0
 
         self.pitch_track: MappedPitchTrack | None = None
         self.pitch_mapper: PitchMapper | None = None
 
         self._manual_y_range = False
-        self._reference_lines: list[pg.InfiniteLine] = []
-        self._reference_labels: list[pg.TextItem] = []
+
+        self._reference_lines: list[
+            pg.InfiniteLine
+        ] = []
+
+        self._reference_labels_left: list[
+            pg.TextItem
+        ] = []
+
+        self._reference_labels_right: list[
+            pg.TextItem
+        ] = []
 
         self._configure_plot()
 
     def _configure_plot(self) -> None:
-        """Configure axes, grid, curve, and fixed playhead."""
+        """Configure the pitch plot and fixed playhead."""
+
         self.setBackground("white")
 
         plot_item = self.getPlotItem()
-        plot_item.setLabel("bottom", "")
-        plot_item.setLabel("left", "Pitch", units="cents")
+
+        # Hide every plot axis. The pitch plot should use the same full
+        # horizontal plotting area as the waveform.
+        plot_item.hideAxis("left")
+        plot_item.hideAxis("right")
+        plot_item.showAxis("bottom")
+
+        # No background grid.
+        plot_item.showGrid(
+            x=False,
+            y=False,
+        )
+
+        plot_item.setLabel(
+            "bottom",
+            "",
+        )
 
         bottom_axis = plot_item.getAxis("bottom")
         bottom_axis.setPen("#777777")
         bottom_axis.setTextPen("#333333")
-
-        left_axis = plot_item.getAxis("left")
-        left_axis.setPen("#777777")
-        left_axis.setTextPen("#333333")
-
-        plot_item.showGrid(
-            x=True,
-            y=True,
-            alpha=0.15,
-        )
 
         self.setXRange(
             -self.half_window,
@@ -66,14 +92,16 @@ class PitchView(pg.PlotWidget):
             padding=0,
         )
 
+        # Use a distinct, thicker color from the waveform.
         self.pitch_curve = self.plot(
             pen=pg.mkPen(
-                color="#1976D2",
-                width=1.5,
+                color="#C62828",
+                width=2.5,
             ),
             connect="finite",
         )
 
+        # Fixed playback-position line.
         self.playhead = pg.InfiniteLine(
             pos=self.current_time,
             angle=90,
@@ -83,7 +111,12 @@ class PitchView(pg.PlotWidget):
                 width=2,
             ),
         )
-        self.addItem(self.playhead)
+
+        self.addItem(
+            self.playhead
+        )
+
+        self._update_time_ticks()
 
     def set_pitch_track(
         self,
@@ -91,20 +124,36 @@ class PitchView(pg.PlotWidget):
         pitch_mapper: PitchMapper | None = None,
     ) -> None:
         """Set mapped pitch data and the musical reference system."""
+
         self.pitch_track = pitch_track
         self.pitch_mapper = pitch_mapper
+
         self._manual_y_range = False
 
         self._update_pitch_curve()
         self._update_reference_lines()
         self._update_y_range()
+        self._update_time_ticks()
 
-    def set_current_time(self, current_time: float) -> None:
-        """Move playback position and scroll the absolute-time window."""
-        self.current_time = float(current_time)
+    def set_current_time(
+        self,
+        current_time: float,
+    ) -> None:
+        """Set the absolute time at the center of the visible window."""
 
-        view_start = self.current_time - self.half_window
-        view_end = self.current_time + self.half_window
+        self.current_time = float(
+            current_time
+        )
+
+        view_start = (
+            self.current_time
+            - self.half_window
+        )
+
+        view_end = (
+            self.current_time
+            + self.half_window
+        )
 
         self.setXRange(
             view_start,
@@ -112,19 +161,28 @@ class PitchView(pg.PlotWidget):
             padding=0,
         )
 
-        self.playhead.setPos(self.current_time)
-
+        self.playhead.setPos(
+            self.current_time
+        )
+        self._update_time_ticks()
         self._update_reference_label_positions()
 
         if not self._manual_y_range:
             self._update_y_range()
 
-    def set_playback_position(self, current_time: float) -> None:
-        """Alias used by PlayerController for playback synchronization."""
-        self.set_current_time(current_time)
+    def set_playback_position(
+        self,
+        current_time: float,
+    ) -> None:
+        """Alias used by PlayerController."""
+
+        self.set_current_time(
+            current_time
+        )
 
     def auto_range_y(self) -> None:
         """Resume automatic Y-axis scaling."""
+
         self._manual_y_range = False
         self._update_y_range()
 
@@ -134,8 +192,14 @@ class PitchView(pg.PlotWidget):
         maximum: float,
     ) -> None:
         """Set a fixed Y-axis range in cents."""
-        if not np.isfinite(minimum) or not np.isfinite(maximum):
-            raise ValueError("Y-axis limits must be finite.")
+
+        if not (
+            np.isfinite(minimum)
+            and np.isfinite(maximum)
+        ):
+            raise ValueError(
+                "Y-axis limits must be finite."
+            )
 
         if maximum <= minimum:
             raise ValueError(
@@ -143,6 +207,7 @@ class PitchView(pg.PlotWidget):
             )
 
         self._manual_y_range = True
+
         self.setYRange(
             float(minimum),
             float(maximum),
@@ -150,7 +215,8 @@ class PitchView(pg.PlotWidget):
         )
 
     def _update_pitch_curve(self) -> None:
-        """Draw the continuous mapped pitch curve."""
+        """Draw the pitch curve while preserving missing-data gaps."""
+
         if self.pitch_track is None:
             self.pitch_curve.clear()
             return
@@ -158,35 +224,40 @@ class PitchView(pg.PlotWidget):
         times = self.pitch_track.times
         cents = self.pitch_track.cents_from_sa
 
-        valid = (
-            np.isfinite(times)
-            & np.isfinite(cents)
-        )
+        valid_time = np.isfinite(times)
 
-        if not np.any(valid):
+        if not np.any(valid_time):
             self.pitch_curve.clear()
             return
 
+        # Keep NaNs in cents. With connect="finite", PyQtGraph leaves a gap
+        # wherever the pitch value is missing.
         self.pitch_curve.setData(
-            times[valid],
-            cents[valid],
+            times[valid_time],
+            cents[valid_time],
         )
 
     def _clear_reference_items(self) -> None:
-        """Remove currently displayed reference lines and labels."""
+        """Remove reference lines and labels."""
+
         plot_item = self.getPlotItem()
 
         for item in self._reference_lines:
             plot_item.removeItem(item)
 
-        for item in self._reference_labels:
+        for item in self._reference_labels_left:
+            plot_item.removeItem(item)
+
+        for item in self._reference_labels_right:
             plot_item.removeItem(item)
 
         self._reference_lines.clear()
-        self._reference_labels.clear()
+        self._reference_labels_left.clear()
+        self._reference_labels_right.clear()
 
     def _update_reference_lines(self) -> None:
-        """Draw active raga/svara reference lines across three octaves."""
+        """Draw active raga reference lines across three octaves."""
+
         self._clear_reference_items()
 
         if self.pitch_mapper is None:
@@ -194,10 +265,26 @@ class PitchView(pg.PlotWidget):
 
         plot_item = self.getPlotItem()
 
-        for cents, label in self.pitch_mapper.reference_lines(
-            min_octave=-1,
-            max_octave=1,
-        ):
+        reference_notes = (
+            self.pitch_mapper.reference_lines(
+                min_octave=-1,
+                max_octave=1,
+            )
+        )
+
+        left_label_x = (
+            self.current_time
+            - self.half_window
+            + 0.15
+        )
+
+        right_label_x = (
+            self.current_time
+            + self.half_window
+            - 0.15
+        )
+
+        for cents, label in reference_notes:
             line = pg.InfiniteLine(
                 pos=cents,
                 angle=0,
@@ -207,45 +294,158 @@ class PitchView(pg.PlotWidget):
                     width=1,
                 ),
             )
-            plot_item.addItem(line)
-            self._reference_lines.append(line)
 
-            text = pg.TextItem(
-                text=str(label),
-                color="#666666",
-                anchor=(1.0, 0.5),
+            plot_item.addItem(
+                line
             )
-            plot_item.addItem(text)
-            self._reference_labels.append(text)
 
-        self._update_reference_label_positions()
+            self._reference_lines.append(
+                line
+            )
+
+            for cents, label in reference_notes:
+                line = pg.InfiniteLine(
+                    pos=cents,
+                    angle=0,
+                    movable=False,
+                    pen=pg.mkPen(
+                        color="#999999",
+                        width=1,
+                    ),
+                )
+
+                plot_item.addItem(
+                    line
+                )
+
+                self._reference_lines.append(
+                    line
+                )
+
+                left_text = pg.TextItem(
+                    text=str(label),
+                    color="#666666",
+                    anchor=(0.0, 0.5),
+                )
+
+                right_text = pg.TextItem(
+                    text=str(label),
+                    color="#666666",
+                    anchor=(1.0, 0.5),
+                )
+
+                plot_item.addItem(
+                    left_text
+                )
+
+                plot_item.addItem(
+                    right_text
+                )
+
+                left_text.setPos(
+                    left_label_x,
+                    cents,
+                )
+
+                right_text.setPos(
+                    right_label_x,
+                    cents,
+                )
+
+                self._reference_labels_left.append(
+                    left_text
+                )
+
+                self._reference_labels_right.append(
+                    right_text
+                )
 
     def _update_reference_label_positions(self) -> None:
-        """Keep reference-note labels at the right edge of the view."""
-        if not self._reference_lines:
+        """Keep Svara labels at fixed insets inside both plot edges."""
+
+        if not self._reference_labels_left:
             return
 
-        label_x = self.current_time + self.half_window
+        left_label_x = (
+            self.current_time
+            - self.half_window
+            + 0.15
+        )
 
-        for label, line in zip(
-            self._reference_labels,
-            self._reference_lines,
-        ):
+        right_label_x = (
+            self.current_time
+            + self.half_window
+            - 0.15
+        )
+
+        for label in self._reference_labels_left:
+            position = label.pos()
+
             label.setPos(
-                label_x,
-                line.value(),
+                left_label_x,
+                position.y(),
             )
+
+        for label in self._reference_labels_right:
+            position = label.pos()
+
+            label.setPos(
+                right_label_x,
+                position.y(),
+            )
+
+    def _update_time_ticks(self) -> None:
+        """Show the visible absolute timeline in mm:ss format."""
+
+        start = self.current_time - self.half_window
+        end = self.current_time + self.half_window
+
+        start_second = int(np.ceil(start))
+        end_second = int(np.floor(end))
+
+        ticks = []
+
+        for second in range(
+            start_second,
+            end_second + 1,
+        ):
+            if second < 0:
+                continue
+
+            minutes, seconds = divmod(
+                second,
+                60,
+            )
+
+            ticks.append(
+                (
+                    float(second),
+                    f"{minutes:02d}:{seconds:02d}",
+                )
+            )
+
+        self.getPlotItem().getAxis(
+            "bottom"
+        ).setTicks([ticks])
 
     def _update_y_range(self) -> None:
         """Fit Y to valid pitch data in the current visible time window."""
+
         if self.pitch_track is None:
             return
 
         times = self.pitch_track.times
         cents = self.pitch_track.cents_from_sa
 
-        view_start = self.current_time - self.half_window
-        view_end = self.current_time + self.half_window
+        view_start = (
+            self.current_time
+            - self.half_window
+        )
+
+        view_end = (
+            self.current_time
+            + self.half_window
+        )
 
         valid = (
             np.isfinite(times)
@@ -259,10 +459,18 @@ class PitchView(pg.PlotWidget):
 
         visible_cents = cents[valid]
 
-        minimum = float(np.min(visible_cents))
-        maximum = float(np.max(visible_cents))
+        minimum = float(
+            np.min(visible_cents)
+        )
 
-        if np.isclose(minimum, maximum):
+        maximum = float(
+            np.max(visible_cents)
+        )
+
+        if np.isclose(
+            minimum,
+            maximum,
+        ):
             padding = 100.0
         else:
             padding = max(
@@ -278,22 +486,12 @@ class PitchView(pg.PlotWidget):
 
     def clear(self) -> None:
         """Clear pitch data and musical reference lines."""
+
         self.pitch_track = None
         self.pitch_mapper = None
+
         self.pitch_curve.clear()
 
         self._clear_reference_items()
+
         self._manual_y_range = False
-
-    def wheelEvent(self, event) -> None:
-        """Treat user Y zooming as switching to manual Y range control."""
-        before = self.viewRange()[1]
-
-        super().wheelEvent(event)
-
-        after = self.viewRange()[1]
-
-        if not np.allclose(before, after):
-            self._manual_y_range = True
-
-        self._update_reference_label_positions()

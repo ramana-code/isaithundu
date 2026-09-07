@@ -57,8 +57,8 @@ class PlayerController:
     # Temporary development pitch settings.
     # These will eventually come from YAML metadata.
     PITCH_ANALYZER_BACKEND = "essentia"
-    PITCH_SRUTHI = "G3"
-    PITCH_SRUTHI_CENTS = -20.0
+    PITCH_SRUTHI = "A#3"
+    PITCH_SRUTHI_CENTS = -2.0
     PITCH_MELA = 28
 
     def __init__(
@@ -378,10 +378,7 @@ class PlayerController:
             )
         )
 
-        self.waveforms.set_current_time(
-            self.region_start
-        )
-        self.pitch_view.set_current_time(
+        self._set_current_time(
             self.region_start
         )
 
@@ -800,7 +797,7 @@ class PlayerController:
         self,
         marker_id: str,
     ) -> None:
-        """Center the waveform views on a marker."""
+        """Center the waveform and pitch views on a marker."""
 
         marker = self.metadata.markers.get(
             marker_id
@@ -809,11 +806,7 @@ class PlayerController:
         if marker is None:
             return
 
-        self.waveforms.recenter_on_time(
-            marker.seconds
-        )
-
-        self.pitch_view.set_current_time(
+        self._recenter_views(
             marker.seconds
         )
 
@@ -1144,9 +1137,23 @@ class PlayerController:
         self,
         current_time: float,
     ) -> None:
-        """Set the shared absolute time for waveform and pitch views."""
+        """Set the playback position in both waveform and pitch views."""
 
-        self.waveforms.set_current_time(
+        self.waveforms.set_playback_position(
+            current_time
+        )
+
+        self.pitch_view.set_current_time(
+            current_time
+        )
+
+    def _recenter_views(
+        self,
+        current_time: float,
+    ) -> None:
+        """Recenter both waveform and pitch views without moving playback."""
+
+        self.waveforms.recenter_on_time(
             current_time
         )
 
