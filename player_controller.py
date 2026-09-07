@@ -634,7 +634,11 @@ class PlayerController:
 
         # Marker table actions.
         self.marker_table.play_near_marker_requested.connect(
-            self.play_region_near_marker
+            self.play_near_marker
+        )
+
+        self.marker_table.loop_near_marker_requested.connect(
+            self.loop_near_marker
         )
 
         self.marker_table.recenter_requested.connect(
@@ -910,9 +914,10 @@ class PlayerController:
             False
         )
 
-    def play_region_near_marker(
+    def play_near_marker(
         self,
         marker_id: str,
+        loop: bool = False,
     ) -> None:
         """Play a temporary ten-second window centered on a marker."""
 
@@ -935,6 +940,11 @@ class PlayerController:
             marker_time + 5.0,
         )
 
+        if (loop):
+            self.loop_checkbox.setChecked(True)
+        else:
+            self.loop_checkbox.setChecked(False)
+
         self.marker_table.set_playback_active(
             True
         )
@@ -946,6 +956,12 @@ class PlayerController:
             start_time=start_time,
             end_time=end_time,
         )
+
+    def loop_near_marker(
+        self,
+        marker_id: str,
+    ) -> None:
+        self.play_near_marker(marker_id, True)
 
     # -----------------------------------------------------------------
     # Marker handling

@@ -25,6 +25,7 @@ class MarkerTable(QTableWidget):
     edit_requested = Signal(str)
     delete_requested = Signal(str)
     play_near_marker_requested = Signal(str)
+    loop_near_marker_requested = Signal(str)
 
     ID_COLUMN = 0
     TIME_COLUMN = 1
@@ -326,6 +327,13 @@ class MarkerTable(QTableWidget):
             not self._playback_active
         )
 
+        loop_near_marker_action = menu.addAction(
+            "Loop near marker"
+        )
+        loop_near_marker_action.setEnabled(
+            not self._playback_active
+        )
+
         recenter_action = menu.addAction(
             "Recenter graph"
         )
@@ -366,6 +374,9 @@ class MarkerTable(QTableWidget):
 
         if chosen_action == play_near_marker_action:
             self.play_near_marker_requested.emit(marker_id)
+
+        elif chosen_action == loop_near_marker_action:
+            self.loop_near_marker_requested.emit(marker_id)
 
         elif chosen_action == recenter_action:
             self.recenter_requested.emit(marker_id)
