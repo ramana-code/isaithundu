@@ -726,8 +726,8 @@ class WaveformView(pg.PlotWidget):
 class SynchronizedWaveforms(QObject):
     """Manage the two synchronized waveform views."""
 
-    TOP_WINDOW_SECONDS = 60.0
-    BOTTOM_WINDOW_SECONDS = 10.0
+    TOP_WINDOW_SECONDS = 120.0
+    BOTTOM_WINDOW_SECONDS = 20.0
 
     waveform_clicked = Signal(float)
     marker_moved = Signal(str, float)

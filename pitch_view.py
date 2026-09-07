@@ -7,6 +7,38 @@ import pyqtgraph as pg
 
 from pitch_mapper import MappedPitchTrack, PitchMapper
 
+class TimeAxisItem(pg.AxisItem):
+    """Display absolute audio time as MM:SS or HH:MM:SS."""
+
+    def tickStrings(
+        self,
+        values,
+        scale,
+        spacing,
+    ):
+        labels = []
+
+        for value in values:
+            if value < 0:
+                labels.append("")
+                continue
+
+            total_seconds = int(round(value))
+
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+
+            if hours > 0:
+                labels.append(
+                    f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                )
+            else:
+                labels.append(
+                    f"{minutes:02d}:{seconds:02d}"
+                )
+
+        return labels
 
 class PitchView(pg.PlotWidget):
     """Display mapped pitch on an absolute audio timeline.
@@ -17,14 +49,23 @@ class PitchView(pg.PlotWidget):
     The playback playhead remains fixed at the center of the visible window.
     """
 
-    DEFAULT_WINDOW_SECONDS = 10.0
+    DEFAULT_WINDOW_SECONDS = 20.0
 
     def __init__(
         self,
         window_seconds: float = DEFAULT_WINDOW_SECONDS,
         parent=None,
     ):
-        super().__init__(parent)
+        bottom_axis = TimeAxisItem(
+            orientation="bottom"
+        )
+
+        super().__init__(
+            parent=parent,
+            axisItems={
+                "bottom": bottom_axis,
+            },
+        )
 
         self.window_seconds = float(window_seconds)
 
@@ -116,8 +157,6 @@ class PitchView(pg.PlotWidget):
             self.playhead
         )
 
-        self._update_time_ticks()
-
     def set_pitch_track(
         self,
         pitch_track: MappedPitchTrack | None,
@@ -133,7 +172,6 @@ class PitchView(pg.PlotWidget):
         self._update_pitch_curve()
         self._update_reference_lines()
         self._update_y_range()
-        self._update_time_ticks()
 
     def set_current_time(
         self,
@@ -164,7 +202,6 @@ class PitchView(pg.PlotWidget):
         self.playhead.setPos(
             self.current_time
         )
-        self._update_time_ticks()
         self._update_reference_label_positions()
 
         if not self._manual_y_range:
@@ -393,40 +430,6 @@ class PitchView(pg.PlotWidget):
                 right_label_x,
                 position.y(),
             )
-
-    def _update_time_ticks(self) -> None:
-        """Show the visible absolute timeline in mm:ss format."""
-
-        start = self.current_time - self.half_window
-        end = self.current_time + self.half_window
-
-        start_second = int(np.ceil(start))
-        end_second = int(np.floor(end))
-
-        ticks = []
-
-        for second in range(
-            start_second,
-            end_second + 1,
-        ):
-            if second < 0:
-                continue
-
-            minutes, seconds = divmod(
-                second,
-                60,
-            )
-
-            ticks.append(
-                (
-                    float(second),
-                    f"{minutes:02d}:{seconds:02d}",
-                )
-            )
-
-        self.getPlotItem().getAxis(
-            "bottom"
-        ).setTicks([ticks])
 
     def _update_y_range(self) -> None:
         """Fit Y to valid pitch data in the current visible time window."""
