@@ -59,6 +59,15 @@ def load_audio(metadata):
 def main():
     app = QApplication(sys.argv)
 
+    if len(sys.argv) != 2:
+        raise RuntimeError(
+            "Usage: python main.py <metadata.yaml>"
+        )
+
+    yaml_path = Path(
+        sys.argv[1]
+    ).expanduser().resolve()
+
     window = load_window()
 
     metadata = load_metadata()
@@ -75,6 +84,7 @@ def main():
         window=window,
         metadata=metadata,
         audio=audio,
+        metadata_path=yaml_path,
     )
 
     app.aboutToQuit.connect(

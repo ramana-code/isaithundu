@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFrame,
     QHBoxLayout,
+    QLabel,
+    QComboBox,
     QPushButton,
+    QSlider,
+    QSpinBox,
     QVBoxLayout,
+    QFileDialog,
 )
 
 from audio_player import AudioPlayer
@@ -21,6 +26,7 @@ from metadata import (
     Marker,
     Region,
     MetadataParser,
+    MetadataSerializer,
     format_seconds_as_time,
     generate_marker_id,
     generate_region_id,
@@ -58,8 +64,6 @@ class PlayerController:
 
     POSITION_TIMER_INTERVAL_MS = 30
 
-    # Temporary development pitch settings.
-    # Sruthi and cents will eventually come from YAML metadata.
     PITCH_ANALYZER_BACKEND = "essentia"
 
     # The raga definitions are maintained independently of librosa.
@@ -73,10 +77,12 @@ class PlayerController:
         window,
         metadata: AudioMetadata,
         audio,
+        metadata_path: str | Path,
     ):
         self.window = window
         self.metadata = metadata
         self.audio = audio
+        self.metadata_path = Path(metadata_path)
 
         self.player = AudioPlayer()
         self.player.set_audio(audio)
@@ -85,9 +91,11 @@ class PlayerController:
             self.SCALE_DATABASE_PATHS
         )
 
+        self._find_frames()
+        self._create_load_panel()
+
         self._analyze_pitch()
 
-        self._find_frames()
         self._create_waveforms()
         self._create_pitch_view()
         self._create_marker_table()
@@ -122,6 +130,11 @@ class PlayerController:
             "playFrame",
         )
 
+        self.load_frame = self.window.findChild(
+            QFrame,
+            "loadFrame",
+        )
+
         self.marker_frame = self.window.findChild(
             QFrame,
             "markerFrame",
@@ -145,6 +158,11 @@ class PlayerController:
                 "Could not find 'playFrame' in the UI."
             )
 
+        if self.load_frame is None:
+            raise RuntimeError(
+                "Could not find 'loadFrame' in the UI."
+            )
+
         if self.marker_frame is None:
             raise RuntimeError(
                 "Could not find 'markerFrame' in the UI."
@@ -154,6 +172,210 @@ class PlayerController:
             raise RuntimeError(
                 "Could not find 'regionFrame' in the UI."
             )
+
+    def _create_load_panel(self) -> None:
+        """Create the audio information and pitch tuning controls."""
+
+        layout = self.load_frame.layout()
+
+        if layout is None:
+            layout = QVBoxLayout(
+                self.load_frame
+            )
+
+        layout.setContentsMargins(
+            8,
+            8,
+            8,
+            8,
+        )
+
+        layout.setSpacing(6)
+
+        # ---------------------------------------------------------
+        # Audio information
+        # ---------------------------------------------------------
+
+        audio_file_label = QLabel(
+            f"Audio: {self.audio.source_path.name}"
+        )
+
+        duration_label = QLabel(
+            f"Duration: {self.audio.duration:.3f} s"
+        )
+
+        sample_rate_label = QLabel(
+            f"Sample rate: {self.audio.sample_rate:,} Hz"
+        )
+
+        raga = self.scale_registry.get(
+            self.metadata.raga
+        )
+
+        raga_label = QLabel(
+            f"Raga: {raga.display_name}"
+        )
+
+        layout.addWidget(
+            audio_file_label
+        )
+
+        layout.addWidget(
+            duration_label
+        )
+
+        layout.addWidget(
+            sample_rate_label
+        )
+
+        layout.addWidget(
+            raga_label
+        )
+
+        # ---------------------------------------------------------
+        # Sruthi
+        # ---------------------------------------------------------
+
+        sruthi_layout = QHBoxLayout()
+
+        sruthi_layout.addWidget(
+            QLabel("Sruthi:")
+        )
+
+        self.sruthi_note_combo = QComboBox()
+
+        self.sruthi_note_combo.addItems(
+            [
+                "C",
+                "C#",
+                "D",
+                "D#",
+                "E",
+                "F",
+                "F#",
+                "G",
+                "G#",
+                "A",
+                "A#",
+                "B",
+            ]
+        )
+
+        octave_layout = QHBoxLayout()
+
+        self.sruthi_octave_spin = QSpinBox()
+        self.sruthi_octave_spin.setRange(
+            -1,
+            9,
+        )
+
+        sruthi = self.metadata.sruthi
+
+        note = sruthi[:-1]
+        octave = int(sruthi[-1])
+
+        note_index = self.sruthi_note_combo.findText(
+            note
+        )
+
+        if note_index >= 0:
+            self.sruthi_note_combo.setCurrentIndex(
+                note_index
+            )
+
+        self.sruthi_octave_spin.setValue(
+            octave
+        )
+
+        sruthi_layout.addWidget(
+            self.sruthi_note_combo
+        )
+
+        sruthi_layout.addWidget(
+            self.sruthi_octave_spin
+        )
+
+        layout.addLayout(
+            sruthi_layout
+        )
+
+        # ---------------------------------------------------------
+        # Cents
+        # ---------------------------------------------------------
+
+        cents_layout = QHBoxLayout()
+
+        cents_layout.addWidget(
+            QLabel("Cents:")
+        )
+
+        self.cents_slider = QSlider(
+            Qt.Orientation.Horizontal
+        )
+
+        self.cents_slider.setRange(
+            -50,
+            50,
+        )
+
+        self.cents_slider.setValue(
+            int(round(self.metadata.cents))
+        )
+
+        self.cents_spin = QSpinBox()
+
+        self.cents_spin.setRange(
+            -50,
+            50,
+        )
+
+        self.cents_spin.setValue(
+            int(round(self.metadata.cents))
+        )
+
+        cents_layout.addWidget(
+            self.cents_slider
+        )
+
+        cents_layout.addWidget(
+            self.cents_spin
+        )
+
+        layout.addLayout(
+            cents_layout
+        )
+
+        # ---------------------------------------------------------
+        # Save buttons
+        # ---------------------------------------------------------
+
+        save_layout = QHBoxLayout()
+
+        self.save_button = QPushButton(
+            "Save"
+        )
+
+        self.save_as_button = QPushButton(
+            "Save As..."
+        )
+
+        save_layout.addWidget(
+            self.save_button
+        )
+
+        save_layout.addWidget(
+            self.save_as_button
+        )
+
+        layout.addLayout(
+            save_layout
+        )
+
+        # Keep references to information labels for future updates.
+        self.audio_file_label = audio_file_label
+        self.duration_label = duration_label
+        self.sample_rate_label = sample_rate_label
+        self.raga_label = raga_label
 
     def _create_waveforms(self) -> None:
         """Create and initialize the synchronized waveform views."""
@@ -487,6 +709,30 @@ class PlayerController:
             self.player.set_loop
         )
 
+        self.sruthi_note_combo.currentTextChanged.connect(
+            self._on_sruthi_changed
+        )
+
+        self.sruthi_octave_spin.valueChanged.connect(
+            self._on_sruthi_changed
+        )
+
+        self.cents_slider.valueChanged.connect(
+            self._on_cents_changed
+        )
+
+        self.cents_spin.valueChanged.connect(
+            self._on_cents_changed
+        )
+
+        self.save_button.clicked.connect(
+            self.save_metadata
+        )
+
+        self.save_as_button.clicked.connect(
+            self.save_metadata_as
+        )
+
     def _create_position_timer(self) -> None:
         """Create the timer used to synchronize playback state."""
 
@@ -503,6 +749,76 @@ class PlayerController:
         )
 
         self.position_timer.start()
+
+    def _get_sruthi_text(self) -> str:
+        """Return the currently selected Western pitch name with octave."""
+
+        return (
+            f"{self.sruthi_note_combo.currentText()}"
+            f"{self.sruthi_octave_spin.value()}"
+        )
+
+    def _on_sruthi_changed(self) -> None:
+        """Apply a changed Sruthi without reanalyzing the audio."""
+
+        sruthi = self._get_sruthi_text()
+
+        if sruthi == self.metadata.sruthi:
+            return
+
+        self.metadata.sruthi = sruthi
+
+        self._remap_pitch()
+
+    def _on_cents_changed(self, value: int) -> None:
+        """Keep the cents controls synchronized and remap the pitch."""
+
+        value = int(value)
+
+        if self.cents_slider.value() != value:
+            self.cents_slider.setValue(value)
+
+        if self.cents_spin.value() != value:
+            self.cents_spin.setValue(value)
+
+        new_cents = float(value)
+
+        if self.metadata.cents == new_cents:
+            return
+
+        self.metadata.cents = new_cents
+
+        self._remap_pitch()
+
+    def _remap_pitch(self) -> None:
+        """Rebuild pitch mapping using the existing analyzed pitch track."""
+
+        sa_frequency_hz = self._calculate_sa_frequency()
+
+        scale = self.scale_registry.get(
+            self.metadata.raga
+        )
+
+        pitch_system = PitchSystem(
+            sa_frequency_hz=sa_frequency_hz,
+            ratios=DEFAULT_RATIOS,
+            scale=scale,
+        )
+
+        self.pitch_mapper = PitchMapper(
+            pitch_system
+        )
+
+        self.mapped_pitch_track = (
+            self.pitch_mapper.map_track(
+                self.pitch_track
+            )
+        )
+
+        self.pitch_view.set_pitch_track(
+            self.mapped_pitch_track,
+            self.pitch_mapper,
+        )
 
     # -----------------------------------------------------------------
     # Playback
@@ -1237,6 +1553,49 @@ class PlayerController:
 
         self.marker_table.set_non_deletable_marker_ids(
             protected_ids
+        )
+
+    def save_metadata(self) -> None:
+        """Save the current metadata to the active YAML file."""
+
+        if self.metadata_path is None:
+            self.save_metadata_as()
+            return
+
+        MetadataSerializer().save(
+            self.metadata,
+            str(self.metadata_path),
+        )
+
+        print(
+            f"Saved metadata: {self.metadata_path}"
+        )
+
+
+    def save_metadata_as(self) -> None:
+        """Save the current metadata to a new YAML file."""
+
+        path, _ = QFileDialog.getSaveFileName(
+            self.window,
+            "Save Metadata As",
+            str(self.metadata_path)
+            if self.metadata_path is not None
+            else "",
+            "YAML Files (*.yaml *.yml)",
+        )
+
+        if not path:
+            return
+
+        self.metadata_path = Path(path)
+
+        MetadataSerializer().save(
+            self.metadata,
+            str(self.metadata_path),
+        )
+
+        print(
+            f"Saved metadata: {self.metadata_path}"
         )
 
     # -----------------------------------------------------------------
