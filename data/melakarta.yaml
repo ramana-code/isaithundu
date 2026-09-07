@@ -1,0 +1,291 @@
+database_format: SvaraScaleDatabase
+schema_version: 1.0.0
+scales:
+- id: melakarta_001
+  name: kanakangi
+  degrees: [0, 1, 2, 5, 7, 8, 9]
+  labels: [Sa, Ri1, Ga1, Ma1, Pa, Dha1, Ni1]
+- id: melakarta_002
+  name: ratnangi
+  degrees: [0, 1, 2, 5, 7, 8, 10]
+  labels: [Sa, Ri1, Ga1, Ma1, Pa, Dha1, Ni2]
+- id: melakarta_003
+  name: ganamurthi
+  degrees: [0, 1, 2, 5, 7, 8, 11]
+  labels: [Sa, Ri1, Ga1, Ma1, Pa, Dha1, Ni3]
+- id: melakarta_004
+  name: vanaspathi
+  degrees: [0, 1, 2, 5, 7, 9, 10]
+  labels: [Sa, Ri1, Ga1, Ma1, Pa, Dha2, Ni2]
+- id: melakarta_005
+  name: manavathi
+  degrees: [0, 1, 2, 5, 7, 9, 11]
+  labels: [Sa, Ri1, Ga1, Ma1, Pa, Dha2, Ni3]
+- id: melakarta_006
+  name: tanarupi
+  degrees: [0, 1, 2, 5, 7, 10, 11]
+  labels: [Sa, Ri1, Ga1, Ma1, Pa, Dha3, Ni3]
+- id: melakarta_007
+  name: senavathi
+  degrees: [0, 1, 3, 5, 7, 8, 9]
+  labels: [Sa, Ri1, Ga2, Ma1, Pa, Dha1, Ni1]
+- id: melakarta_008
+  name: hanumathodi
+  degrees: [0, 1, 3, 5, 7, 8, 10]
+  labels: [Sa, Ri1, Ga2, Ma1, Pa, Dha1, Ni2]
+- id: melakarta_009
+  name: dhenuka
+  degrees: [0, 1, 3, 5, 7, 8, 11]
+  labels: [Sa, Ri1, Ga2, Ma1, Pa, Dha1, Ni3]
+- id: melakarta_010
+  name: natakapriya
+  degrees: [0, 1, 3, 5, 7, 9, 10]
+  labels: [Sa, Ri1, Ga2, Ma1, Pa, Dha2, Ni2]
+- id: melakarta_011
+  name: kokilapriya
+  degrees: [0, 1, 3, 5, 7, 9, 11]
+  labels: [Sa, Ri1, Ga2, Ma1, Pa, Dha2, Ni3]
+- id: melakarta_012
+  name: rupavathi
+  degrees: [0, 1, 3, 5, 7, 10, 11]
+  labels: [Sa, Ri1, Ga2, Ma1, Pa, Dha3, Ni3]
+- id: melakarta_013
+  name: gayakapriya
+  degrees: [0, 1, 4, 5, 7, 8, 9]
+  labels: [Sa, Ri1, Ga3, Ma1, Pa, Dha1, Ni1]
+- id: melakarta_014
+  name: vakulabharanam
+  degrees: [0, 1, 4, 5, 7, 8, 10]
+  labels: [Sa, Ri1, Ga3, Ma1, Pa, Dha1, Ni2]
+- id: melakarta_015
+  name: mayamalavagaula
+  degrees: [0, 1, 4, 5, 7, 8, 11]
+  labels: [Sa, Ri1, Ga3, Ma1, Pa, Dha1, Ni3]
+- id: melakarta_016
+  name: chakravakom
+  degrees: [0, 1, 4, 5, 7, 9, 10]
+  labels: [Sa, Ri1, Ga3, Ma1, Pa, Dha2, Ni2]
+- id: melakarta_017
+  name: suryakantham
+  degrees: [0, 1, 4, 5, 7, 9, 11]
+  labels: [Sa, Ri1, Ga3, Ma1, Pa, Dha2, Ni3]
+- id: melakarta_018
+  name: hatakambari
+  degrees: [0, 1, 4, 5, 7, 10, 11]
+  labels: [Sa, Ri1, Ga3, Ma1, Pa, Dha3, Ni3]
+- id: melakarta_019
+  name: jhankaradhwani
+  degrees: [0, 2, 3, 5, 7, 8, 9]
+  labels: [Sa, Ri2, Ga2, Ma1, Pa, Dha1, Ni1]
+- id: melakarta_020
+  name: natabhairavi
+  degrees: [0, 2, 3, 5, 7, 8, 10]
+  labels: [Sa, Ri2, Ga2, Ma1, Pa, Dha1, Ni2]
+- id: melakarta_021
+  name: keeravani
+  degrees: [0, 2, 3, 5, 7, 8, 11]
+  labels: [Sa, Ri2, Ga2, Ma1, Pa, Dha1, Ni3]
+- id: melakarta_022
+  name: kharaharapriya
+  degrees: [0, 2, 3, 5, 7, 9, 10]
+  labels: [Sa, Ri2, Ga2, Ma1, Pa, Dha2, Ni2]
+- id: melakarta_023
+  name: gaurimanohari
+  degrees: [0, 2, 3, 5, 7, 9, 11]
+  labels: [Sa, Ri2, Ga2, Ma1, Pa, Dha2, Ni3]
+- id: melakarta_024
+  name: varunapriya
+  degrees: [0, 2, 3, 5, 7, 10, 11]
+  labels: [Sa, Ri2, Ga2, Ma1, Pa, Dha3, Ni3]
+- id: melakarta_025
+  name: mararanjini
+  degrees: [0, 2, 4, 5, 7, 8, 9]
+  labels: [Sa, Ri2, Ga3, Ma1, Pa, Dha1, Ni1]
+- id: melakarta_026
+  name: charukesi
+  degrees: [0, 2, 4, 5, 7, 8, 10]
+  labels: [Sa, Ri2, Ga3, Ma1, Pa, Dha1, Ni2]
+- id: melakarta_027
+  name: sarasangi
+  degrees: [0, 2, 4, 5, 7, 8, 11]
+  labels: [Sa, Ri2, Ga3, Ma1, Pa, Dha1, Ni3]
+- id: melakarta_028
+  name: harikambhoji
+  degrees: [0, 2, 4, 5, 7, 9, 10]
+  labels: [Sa, Ri2, Ga3, Ma1, Pa, Dha2, Ni2]
+- id: melakarta_029
+  name: dheerasankarabharanam
+  degrees: [0, 2, 4, 5, 7, 9, 11]
+  labels: [Sa, Ri2, Ga3, Ma1, Pa, Dha2, Ni3]
+- id: melakarta_030
+  name: naganandini
+  degrees: [0, 2, 4, 5, 7, 10, 11]
+  labels: [Sa, Ri2, Ga3, Ma1, Pa, Dha3, Ni3]
+- id: melakarta_031
+  name: yagapriya
+  degrees: [0, 3, 4, 5, 7, 8, 9]
+  labels: [Sa, Ri3, Ga3, Ma1, Pa, Dha1, Ni1]
+- id: melakarta_032
+  name: ragavardhini
+  degrees: [0, 3, 4, 5, 7, 8, 10]
+  labels: [Sa, Ri3, Ga3, Ma1, Pa, Dha1, Ni2]
+- id: melakarta_033
+  name: gangeyabhushani
+  degrees: [0, 3, 4, 5, 7, 8, 11]
+  labels: [Sa, Ri3, Ga3, Ma1, Pa, Dha1, Ni3]
+- id: melakarta_034
+  name: vagadheeswari
+  degrees: [0, 3, 4, 5, 7, 9, 10]
+  labels: [Sa, Ri3, Ga3, Ma1, Pa, Dha2, Ni2]
+- id: melakarta_035
+  name: sulini
+  degrees: [0, 3, 4, 5, 7, 9, 11]
+  labels: [Sa, Ri3, Ga3, Ma1, Pa, Dha2, Ni3]
+- id: melakarta_036
+  name: chalanatta
+  degrees: [0, 3, 4, 5, 7, 10, 11]
+  labels: [Sa, Ri3, Ga3, Ma1, Pa, Dha3, Ni3]
+- id: melakarta_037
+  name: salagam
+  degrees: [0, 1, 2, 6, 7, 8, 9]
+  labels: [Sa, Ri1, Ga1, Ma2, Pa, Dha1, Ni1]
+- id: melakarta_038
+  name: jalarnavam
+  degrees: [0, 1, 2, 6, 7, 8, 10]
+  labels: [Sa, Ri1, Ga1, Ma2, Pa, Dha1, Ni2]
+- id: melakarta_039
+  name: jhalavarali
+  degrees: [0, 1, 2, 6, 7, 8, 11]
+  labels: [Sa, Ri1, Ga1, Ma2, Pa, Dha1, Ni3]
+- id: melakarta_040
+  name: navaneetham
+  degrees: [0, 1, 2, 6, 7, 9, 10]
+  labels: [Sa, Ri1, Ga1, Ma2, Pa, Dha2, Ni2]
+- id: melakarta_041
+  name: pavani
+  degrees: [0, 1, 2, 6, 7, 9, 11]
+  labels: [Sa, Ri1, Ga1, Ma2, Pa, Dha2, Ni3]
+- id: melakarta_042
+  name: raghupriya
+  degrees: [0, 1, 2, 6, 7, 10, 11]
+  labels: [Sa, Ri1, Ga1, Ma2, Pa, Dha3, Ni3]
+- id: melakarta_043
+  name: gavambodhi
+  degrees: [0, 1, 3, 6, 7, 8, 9]
+  labels: [Sa, Ri1, Ga2, Ma2, Pa, Dha1, Ni1]
+- id: melakarta_044
+  name: bhavapriya
+  degrees: [0, 1, 3, 6, 7, 8, 10]
+  labels: [Sa, Ri1, Ga2, Ma2, Pa, Dha1, Ni2]
+- id: melakarta_045
+  name: subhapanthuvarali
+  degrees: [0, 1, 3, 6, 7, 8, 11]
+  labels: [Sa, Ri1, Ga2, Ma2, Pa, Dha1, Ni3]
+- id: melakarta_046
+  name: shadvidhamargini
+  degrees: [0, 1, 3, 6, 7, 9, 10]
+  labels: [Sa, Ri1, Ga2, Ma2, Pa, Dha2, Ni2]
+- id: melakarta_047
+  name: suvarnangi
+  degrees: [0, 1, 3, 6, 7, 9, 11]
+  labels: [Sa, Ri1, Ga2, Ma2, Pa, Dha2, Ni3]
+- id: melakarta_048
+  name: divyamani
+  degrees: [0, 1, 3, 6, 7, 10, 11]
+  labels: [Sa, Ri1, Ga2, Ma2, Pa, Dha3, Ni3]
+- id: melakarta_049
+  name: dhavalambari
+  degrees: [0, 1, 4, 6, 7, 8, 9]
+  labels: [Sa, Ri1, Ga3, Ma2, Pa, Dha1, Ni1]
+- id: melakarta_050
+  name: namanarayani
+  degrees: [0, 1, 4, 6, 7, 8, 10]
+  labels: [Sa, Ri1, Ga3, Ma2, Pa, Dha1, Ni2]
+- id: melakarta_051
+  name: kamavardhini
+  degrees: [0, 1, 4, 6, 7, 8, 11]
+  labels: [Sa, Ri1, Ga3, Ma2, Pa, Dha1, Ni3]
+- id: melakarta_052
+  name: ramapriya
+  degrees: [0, 1, 4, 6, 7, 9, 10]
+  labels: [Sa, Ri1, Ga3, Ma2, Pa, Dha2, Ni2]
+- id: melakarta_053
+  name: gamanasrama
+  degrees: [0, 1, 4, 6, 7, 9, 11]
+  labels: [Sa, Ri1, Ga3, Ma2, Pa, Dha2, Ni3]
+- id: melakarta_054
+  name: viswambhari
+  degrees: [0, 1, 4, 6, 7, 10, 11]
+  labels: [Sa, Ri1, Ga3, Ma2, Pa, Dha3, Ni3]
+- id: melakarta_055
+  name: syamalangi
+  degrees: [0, 2, 3, 6, 7, 8, 9]
+  labels: [Sa, Ri2, Ga2, Ma2, Pa, Dha1, Ni1]
+- id: melakarta_056
+  name: shanmukhapriya
+  degrees: [0, 2, 3, 6, 7, 8, 10]
+  labels: [Sa, Ri2, Ga2, Ma2, Pa, Dha1, Ni2]
+- id: melakarta_057
+  name: simhendramadhyamam
+  degrees: [0, 2, 3, 6, 7, 8, 11]
+  labels: [Sa, Ri2, Ga2, Ma2, Pa, Dha1, Ni3]
+- id: melakarta_058
+  name: hemavathi
+  degrees: [0, 2, 3, 6, 7, 9, 10]
+  labels: [Sa, Ri2, Ga2, Ma2, Pa, Dha2, Ni2]
+- id: melakarta_059
+  name: dharmavathi
+  degrees: [0, 2, 3, 6, 7, 9, 11]
+  labels: [Sa, Ri2, Ga2, Ma2, Pa, Dha2, Ni3]
+- id: melakarta_060
+  name: neethimathi
+  degrees: [0, 2, 3, 6, 7, 10, 11]
+  labels: [Sa, Ri2, Ga2, Ma2, Pa, Dha3, Ni3]
+- id: melakarta_061
+  name: kanthamani
+  degrees: [0, 2, 4, 6, 7, 8, 9]
+  labels: [Sa, Ri2, Ga3, Ma2, Pa, Dha1, Ni1]
+- id: melakarta_062
+  name: rishabhapriya
+  degrees: [0, 2, 4, 6, 7, 8, 10]
+  labels: [Sa, Ri2, Ga3, Ma2, Pa, Dha1, Ni2]
+- id: melakarta_063
+  name: latangi
+  degrees: [0, 2, 4, 6, 7, 8, 11]
+  labels: [Sa, Ri2, Ga3, Ma2, Pa, Dha1, Ni3]
+- id: melakarta_064
+  name: vachaspathi
+  degrees: [0, 2, 4, 6, 7, 9, 10]
+  labels: [Sa, Ri2, Ga3, Ma2, Pa, Dha2, Ni2]
+- id: melakarta_065
+  name: mechakalyani
+  degrees: [0, 2, 4, 6, 7, 9, 11]
+  labels: [Sa, Ri2, Ga3, Ma2, Pa, Dha2, Ni3]
+- id: melakarta_066
+  name: chitrambari
+  degrees: [0, 2, 4, 6, 7, 10, 11]
+  labels: [Sa, Ri2, Ga3, Ma2, Pa, Dha3, Ni3]
+- id: melakarta_067
+  name: sucharitra
+  degrees: [0, 3, 4, 6, 7, 8, 9]
+  labels: [Sa, Ri3, Ga3, Ma2, Pa, Dha1, Ni1]
+- id: melakarta_068
+  name: jyotisvarupini
+  degrees: [0, 3, 4, 6, 7, 8, 10]
+  labels: [Sa, Ri3, Ga3, Ma2, Pa, Dha1, Ni2]
+- id: melakarta_069
+  name: dhatuvardhini
+  degrees: [0, 3, 4, 6, 7, 8, 11]
+  labels: [Sa, Ri3, Ga3, Ma2, Pa, Dha1, Ni3]
+- id: melakarta_070
+  name: nasikabhushani
+  degrees: [0, 3, 4, 6, 7, 9, 10]
+  labels: [Sa, Ri3, Ga3, Ma2, Pa, Dha2, Ni2]
+- id: melakarta_071
+  name: kosalam
+  degrees: [0, 3, 4, 6, 7, 9, 11]
+  labels: [Sa, Ri3, Ga3, Ma2, Pa, Dha2, Ni3]
+- id: melakarta_072
+  name: rasikapriya
+  degrees: [0, 3, 4, 6, 7, 10, 11]
+  labels: [Sa, Ri3, Ga3, Ma2, Pa, Dha3, Ni3]

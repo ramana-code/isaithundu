@@ -1,0 +1,9 @@
+database_format: SvaraScaleDatabase
+schema_version: 1.0.0
+scales:
+- id: mohanam
+  degrees: [0, 2, 4, 7, 9]
+  labels: [Sa, Ri, Ga, Pa, Dha]
+- id: tilang
+  degrees: [0, 4, 5, 7, 10, 11]
+  labels: [Sa, Ga, Ma, Pa, Ni1, Ni2]
