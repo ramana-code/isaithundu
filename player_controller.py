@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -55,11 +57,17 @@ class PlayerController:
     POSITION_TIMER_INTERVAL_MS = 30
 
     # Temporary development pitch settings.
-    # These will eventually come from YAML metadata.
+    # Sruthi and cents will eventually come from YAML metadata.
     PITCH_ANALYZER_BACKEND = "essentia"
     PITCH_SRUTHI = "A#3"
     PITCH_SRUTHI_CENTS = -2.0
-    PITCH_MELA = 28
+
+    # The raga definitions are maintained independently of librosa.
+    SCALE_DATABASE_PATHS = (
+        Path("data/melakarta.yaml"),
+        Path("data/janyaragas.yaml"),
+    )
+    PITCH_RAGA_ID = "tilang"
 
     def __init__(
         self,
@@ -156,7 +164,7 @@ class PlayerController:
         self.waveforms.set_markers(self.metadata)
 
     def _analyze_pitch(self) -> None:
-        """Analyze the complete audio file once and store the pitch track."""
+        """Analyze the complete audio file once and build the mapped pitch track."""
 
         self.pitch_analyzer: PitchAnalyzer = create_pitch_analyzer(
             backend=self.PITCH_ANALYZER_BACKEND,
@@ -168,10 +176,20 @@ class PlayerController:
 
         sa_frequency_hz = self._calculate_sa_frequency()
 
-        pitch_system = PitchSystem.from_melakarta(
+        from scale_registry import ScaleRegistry
+
+        self.scale_registry = ScaleRegistry(
+            self.SCALE_DATABASE_PATHS
+        )
+
+        scale = self.scale_registry.get(
+            self.PITCH_RAGA_ID
+        )
+
+        pitch_system = PitchSystem(
             sa_frequency_hz=sa_frequency_hz,
-            mela=self.PITCH_MELA,
             ratios=DEFAULT_RATIOS,
+            scale=scale,
         )
 
         self.pitch_mapper = PitchMapper(

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Sequence
 
 import numpy as np
 
 from pitch_analyzer import PitchTrack
+from scale_registry import ScaleDefinition
 
 
 # Twelve pitch positions within one octave, expressed as frequency ratios
@@ -29,18 +30,15 @@ DEFAULT_RATIOS = (
 
 @dataclass(frozen=True)
 class PitchSystem:
-    """Define the musical pitch system used to interpret a PitchTrack.
+    """Define the pitch system used to interpret a :class:`PitchTrack`.
 
-    active_notes maps one or more of the twelve pitch positions in an octave
-    to their display labels.  The number of active notes is not assumed to be
-    seven; a raga may contain any subset of the twelve positions.
-
-    All frequencies are derived from sa_frequency_hz and the supplied ratios.
+    A PitchSystem combines a Sa frequency, the universal twelve pitch ratios,
+    and a scale definition supplied by :class:`ScaleRegistry`.
     """
 
     sa_frequency_hz: float
     ratios: Sequence[float]
-    active_notes: Mapping[int, str]
+    scale: ScaleDefinition
 
     def __post_init__(self) -> None:
         sa = float(self.sa_frequency_hz)
@@ -50,7 +48,10 @@ class PitchSystem:
                 "sa_frequency_hz must be a finite positive number."
             )
 
-        ratios = tuple(float(ratio) for ratio in self.ratios)
+        ratios = tuple(
+            float(ratio)
+            for ratio in self.ratios
+        )
 
         if len(ratios) != 12:
             raise ValueError(
@@ -65,35 +66,20 @@ class PitchSystem:
                 "All pitch ratios must be finite and positive."
             )
 
-        if not np.isclose(ratios[0], 1.0):
+        if not np.isclose(
+            ratios[0],
+            1.0,
+        ):
             raise ValueError(
                 "The first pitch ratio must be 1.0."
             )
 
-        notes = {
-            int(position): str(label)
-            for position, label in self.active_notes.items()
-        }
-
-        if not notes:
-            raise ValueError(
-                "PitchSystem must contain at least one active note."
-            )
-
-        if any(
-            position < 0 or position >= 12
-            for position in notes
+        if not isinstance(
+            self.scale,
+            ScaleDefinition,
         ):
-            raise ValueError(
-                "Active note positions must be in the range 0..11."
-            )
-
-        if any(
-            not label
-            for label in notes.values()
-        ):
-            raise ValueError(
-                "Active note labels must not be empty."
+            raise TypeError(
+                "scale must be a ScaleDefinition."
             )
 
         object.__setattr__(
@@ -106,45 +92,12 @@ class PitchSystem:
             "ratios",
             ratios,
         )
-        object.__setattr__(
-            self,
-            "active_notes",
-            notes,
-        )
 
-    @classmethod
-    def from_melakarta(
-        cls,
-        sa_frequency_hz: float,
-        mela: int,
-        ratios: Sequence[float] = DEFAULT_RATIOS,
-    ) -> PitchSystem:
-        """Build a PitchSystem from a librosa melakarta definition."""
+    @property
+    def active_notes(self) -> dict[int, str]:
+        """Return the active degree-to-label mapping from the scale."""
 
-        try:
-            import librosa
-        except ImportError as exc:
-            raise RuntimeError(
-                "librosa is required to create a melakarta PitchSystem."
-            ) from exc
-
-        degrees = librosa.mela_to_degrees(mela)
-        svaras = librosa.mela_to_svara(
-            mela,
-            abbr=False,
-            unicode=False,
-        )
-
-        active_notes = {
-            int(position): svaras[position]
-            for position in degrees
-        }
-
-        return cls(
-            sa_frequency_hz=sa_frequency_hz,
-            ratios=ratios,
-            active_notes=active_notes,
-        )
+        return self.scale.active_notes
 
     @property
     def octave_ratio(self) -> float:
