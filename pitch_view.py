@@ -303,7 +303,7 @@ class PitchView(pg.PlotWidget):
         plot_item = self.getPlotItem()
 
         reference_notes = (
-            self.pitch_mapper.reference_lines(
+            self.pitch_mapper.pitch_system.reference_notes(
                 min_octave=-1,
                 max_octave=1,
             )
@@ -321,81 +321,56 @@ class PitchView(pg.PlotWidget):
             - 0.15
         )
 
-        for cents, label in reference_notes:
+        for cents, position, label, octave in reference_notes:
+            if position == 0:
+                line_pen = pg.mkPen(
+                    color="#555555",
+                    width=2,
+                )
+            else:
+                line_pen = pg.mkPen(
+                    color="#999999",
+                    width=1,
+                )
+
             line = pg.InfiniteLine(
                 pos=cents,
                 angle=0,
                 movable=False,
-                pen=pg.mkPen(
-                    color="#999999",
-                    width=1,
-                ),
+                pen=line_pen,
             )
 
-            plot_item.addItem(
-                line
+            plot_item.addItem(line)
+
+            self._reference_lines.append(line)
+
+            left_text = pg.TextItem(
+                text=str(label),
+                color="#666666",
+                anchor=(0.0, 0.5),
             )
 
-            self._reference_lines.append(
-                line
+            right_text = pg.TextItem(
+                text=str(label),
+                color="#666666",
+                anchor=(1.0, 0.5),
             )
 
-            for cents, label in reference_notes:
-                line = pg.InfiniteLine(
-                    pos=cents,
-                    angle=0,
-                    movable=False,
-                    pen=pg.mkPen(
-                        color="#999999",
-                        width=1,
-                    ),
-                )
+            plot_item.addItem(left_text)
+            plot_item.addItem(right_text)
 
-                plot_item.addItem(
-                    line
-                )
+            left_text.setPos(
+                left_label_x,
+                cents,
+            )
 
-                self._reference_lines.append(
-                    line
-                )
+            right_text.setPos(
+                right_label_x,
+                cents,
+            )
 
-                left_text = pg.TextItem(
-                    text=str(label),
-                    color="#666666",
-                    anchor=(0.0, 0.5),
-                )
-
-                right_text = pg.TextItem(
-                    text=str(label),
-                    color="#666666",
-                    anchor=(1.0, 0.5),
-                )
-
-                plot_item.addItem(
-                    left_text
-                )
-
-                plot_item.addItem(
-                    right_text
-                )
-
-                left_text.setPos(
-                    left_label_x,
-                    cents,
-                )
-
-                right_text.setPos(
-                    right_label_x,
-                    cents,
-                )
-
-                self._reference_labels_left.append(
-                    left_text
-                )
-
-                self._reference_labels_right.append(
-                    right_text
-                )
+            self._reference_labels_left.append( left_text )
+            self._reference_labels_right.append( right_text )
 
     def _update_reference_label_positions(self) -> None:
         """Keep Svara labels at fixed insets inside both plot edges."""
