@@ -22,13 +22,19 @@ from metadata import (
     generate_marker_id,
     generate_region_id,
 )
+from waveform import SynchronizedWaveforms
+from region_table import RegionTable
 from pitch_analyzer import (
     PitchAnalyzer,
     PitchTrack,
     create_pitch_analyzer,
 )
-from waveform import SynchronizedWaveforms
-from region_table import RegionTable
+from pitch_mapper import (
+    DEFAULT_RATIOS,
+    PitchMapper,
+    PitchSystem,
+)
+from pitch_view import PitchView
 
 
 class PlayerController:
@@ -47,7 +53,13 @@ class PlayerController:
     """
 
     POSITION_TIMER_INTERVAL_MS = 30
+
+    # Temporary development pitch settings.
+    # These will eventually come from YAML metadata.
     PITCH_ANALYZER_BACKEND = "essentia"
+    PITCH_SRUTHI = "G3"
+    PITCH_SRUTHI_CENTS = -20.0
+    PITCH_MELA = 28
 
     def __init__(
         self,
@@ -66,6 +78,7 @@ class PlayerController:
 
         self._find_frames()
         self._create_waveforms()
+        self._create_pitch_view()
         self._create_marker_table()
         self._create_region_table()
         self._create_playback_controls()
@@ -75,7 +88,6 @@ class PlayerController:
         self._create_position_timer()
 
         self._print_audio_information()
-
 
     # -----------------------------------------------------------------
     # Initialization
@@ -132,21 +144,6 @@ class PlayerController:
                 "Could not find 'regionFrame' in the UI."
             )
 
-    def _analyze_pitch(self) -> None:
-        """Analyze the complete audio file once."""
-
-        self.pitch_analyzer: PitchAnalyzer = (
-            create_pitch_analyzer(
-                backend=self.PITCH_ANALYZER_BACKEND,
-            )
-        )
-
-        self.pitch_track: PitchTrack = (
-            self.pitch_analyzer.analyze(
-                self.audio
-            )
-        )
-
     def _create_waveforms(self) -> None:
         """Create and initialize the synchronized waveform views."""
 
@@ -157,6 +154,90 @@ class PlayerController:
 
         self.waveforms.set_audio(self.audio)
         self.waveforms.set_markers(self.metadata)
+
+    def _analyze_pitch(self) -> None:
+        """Analyze the complete audio file once and store the pitch track."""
+
+        self.pitch_analyzer: PitchAnalyzer = create_pitch_analyzer(
+            backend=self.PITCH_ANALYZER_BACKEND,
+        )
+
+        self.pitch_track: PitchTrack = (
+            self.pitch_analyzer.analyze(self.audio)
+        )
+
+        sa_frequency_hz = self._calculate_sa_frequency()
+
+        pitch_system = PitchSystem.from_melakarta(
+            sa_frequency_hz=sa_frequency_hz,
+            mela=self.PITCH_MELA,
+            ratios=DEFAULT_RATIOS,
+        )
+
+        self.pitch_mapper = PitchMapper(
+            pitch_system
+        )
+
+        self.mapped_pitch_track = self.pitch_mapper.map_track(
+            self.pitch_track
+        )
+
+    def _calculate_sa_frequency(self) -> float:
+        """Calculate the temporary development Sa frequency."""
+
+        import librosa
+
+        reference_hz = float(
+            librosa.note_to_hz(self.PITCH_SRUTHI)
+        )
+
+        return reference_hz * (
+            2.0 ** (
+                self.PITCH_SRUTHI_CENTS / 1200.0
+            )
+        )
+
+    def _create_pitch_view(self) -> None:
+        """Create the pitch view using the bottom waveform window size."""
+
+        self.pitch_frame = self.window.findChild(
+            QFrame,
+            "pitchFrame",
+        )
+
+        if self.pitch_frame is None:
+            raise RuntimeError(
+                "Could not find 'pitchFrame' in the UI."
+            )
+
+        self.pitch_view = PitchView(
+            window_seconds=(
+                self.waveforms.BOTTOM_WINDOW_SECONDS
+            ),
+            parent=self.pitch_frame,
+        )
+
+        layout = self.pitch_frame.layout()
+
+        if layout is None:
+            layout = QVBoxLayout(
+                self.pitch_frame
+            )
+
+        layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        layout.setSpacing(0)
+        layout.addWidget(self.pitch_view)
+
+        self.pitch_view.set_pitch_track(
+            self.mapped_pitch_track,
+            self.pitch_mapper,
+        )
 
     def _create_marker_table(self) -> None:
         """Create and install the marker table and Add Marker button."""
@@ -300,6 +381,9 @@ class PlayerController:
         self.waveforms.set_current_time(
             self.region_start
         )
+        self.pitch_view.set_current_time(
+            self.region_start
+        )
 
     def _connect_signals(self) -> None:
         """Connect UI/widget signals to controller behavior."""
@@ -432,7 +516,7 @@ class PlayerController:
             self.loop_checkbox.isChecked()
         )
 
-        self.waveforms.set_playback_position(
+        self._set_current_time(
             self.player.current_time
         )
 
@@ -473,7 +557,7 @@ class PlayerController:
             self._get_active_region_times()
         )
 
-        self.waveforms.set_current_time(
+        self._set_current_time(
             start_time
         )
 
@@ -507,80 +591,6 @@ class PlayerController:
         end_time = min(
             self.audio.duration,
             marker_time + 5.0,
-        )
-
-        self.marker_table.set_playback_active(
-            True
-        )
-        self.region_table.set_playback_active(
-            True
-        )
-
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-    def play_selected_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Play a selected region once."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, end_time = (
-            self._get_active_region_times()
-        )
-
-        self.loop_checkbox.setChecked(False)
-
-        self.waveforms.set_playback_position(
-            start_time
-        )
-
-        self.marker_table.set_playback_active(
-            True
-        )
-        self.region_table.set_playback_active(
-            True
-        )
-
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-    def loop_selected_region(
-        self,
-        region_id: str,
-    ) -> None:
-        """Play a selected region repeatedly."""
-
-        region = self.metadata.get_region(
-            region_id
-        )
-
-        if region is None:
-            return
-
-        self.active_region = region
-
-        start_time, end_time = (
-            self._get_active_region_times()
-        )
-
-        self.loop_checkbox.setChecked(True)
-
-        self.waveforms.set_playback_position(
-            start_time
         )
 
         self.marker_table.set_playback_active(
@@ -803,6 +813,10 @@ class PlayerController:
             marker.seconds
         )
 
+        self.pitch_view.set_current_time(
+            marker.seconds
+        )
+
     def on_marker_move_finished(
         self,
         marker_id: str,
@@ -852,9 +866,83 @@ class PlayerController:
         )
 
         if not self.player.is_playing:
-            self.waveforms.set_current_time(
+            self._set_current_time(
                 start_time
             )
+
+    def play_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region once."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(False)
+
+        self._set_current_time(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    def loop_selected_region(
+        self,
+        region_id: str,
+    ) -> None:
+        """Play a selected region repeatedly."""
+
+        region = self.metadata.get_region(
+            region_id
+        )
+
+        if region is None:
+            return
+
+        self.active_region = region
+
+        start_time, end_time = (
+            self._get_active_region_times()
+        )
+
+        self.loop_checkbox.setChecked(True)
+
+        self._set_current_time(
+            start_time
+        )
+
+        self.marker_table.set_playback_active(
+            True
+        )
+        self.region_table.set_playback_active(
+            True
+        )
+
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
 
     def add_region(self) -> None:
         """Create a new region using existing markers."""
@@ -1049,6 +1137,25 @@ class PlayerController:
         )
 
     # -----------------------------------------------------------------
+    # View synchronization
+    # -----------------------------------------------------------------
+
+    def _set_current_time(
+        self,
+        current_time: float,
+    ) -> None:
+        """Set the shared absolute time for waveform and pitch views."""
+
+        self.waveforms.set_current_time(
+            current_time
+        )
+
+        self.pitch_view.set_current_time(
+            current_time
+        )
+
+
+    # -----------------------------------------------------------------
     # Playback state synchronization
     # -----------------------------------------------------------------
 
@@ -1061,7 +1168,7 @@ class PlayerController:
         playing = self.player.is_playing
 
         if playing:
-            self.waveforms.set_playback_position(
+            self._set_current_time(
                 self.player.current_time
             )
 
@@ -1086,8 +1193,14 @@ class PlayerController:
         )
 
     # -----------------------------------------------------------------
-    # Controller helpers
+    # Lifecycle
     # -----------------------------------------------------------------
+
+    def shutdown(self) -> None:
+        """Release timer and audio resources."""
+
+        self.position_timer.stop()
+        self.player.close()
 
     def _update_marker_delete_state(self) -> None:
         """Update which markers may be deleted."""
@@ -1101,16 +1214,6 @@ class PlayerController:
         self.marker_table.set_non_deletable_marker_ids(
             protected_ids
         )
-
-    # -----------------------------------------------------------------
-    # Lifecycle
-    # -----------------------------------------------------------------
-
-    def shutdown(self) -> None:
-        """Release timer and audio resources."""
-
-        self.position_timer.stop()
-        self.player.close()
 
     # -----------------------------------------------------------------
     # Diagnostics
@@ -1137,6 +1240,10 @@ class PlayerController:
             f"Duration      : "
             f"{self.audio.duration:,.3f} seconds"
         )
+        print(
+            f"Pitch frames  : "
+            f"{self.pitch_track.size:,}"
+        )
         print()
         print("First region")
         print("------------")
@@ -1156,4 +1263,4 @@ class PlayerController:
             f"Length        : "
             f"{self.region_end - self.region_start:.3f} seconds"
         )
-        self.pitch_track.print_diagnostics()
+
