@@ -214,13 +214,13 @@ class PlayerController:
 
         audio_info_label = QLabel(
             f"Audio: {self.audio.source_path.name}; "
-            f"Duration: {self.audio.duration:.3f} s; "
-            f"Sample rate: {self.audio.sample_rate:,} Hz; "
-            f"Raga: {raga.display_name}"
+            f"Duration: {format_seconds_as_time(self.audio.duration).split(".")[0]}; "
+            f"{self.audio.sample_rate:,} Hz; "
+            f"{raga.display_name}"
         )
 
         audio_info_label.setStyleSheet(
-            "font-size: 9pt; color: #666666;"
+            "font-size: 10pt; color: #666666;"
         )
 
         audio_info_label.setWordWrap(
@@ -391,7 +391,7 @@ class PlayerController:
         shift_layout = QHBoxLayout()
 
         shift_layout.addWidget(
-            QLabel("Pitch shift:")
+            QLabel("Semitones:")
         )
 
         self.playback_shift_spin = QSpinBox()
@@ -416,7 +416,7 @@ class PlayerController:
         shift_cents_layout = QHBoxLayout()
 
         shift_cents_layout.addWidget(
-            QLabel("Pitch cents:")
+            QLabel("Cents:")
         )
 
         self.playback_shift_cents_slider = QSlider(
@@ -426,6 +426,12 @@ class PlayerController:
         self.playback_shift_cents_slider.setRange(
             -50,
             50,
+        )
+        self.playback_shift_cents_slider.setTickPosition(
+            QSlider.TickPosition.TicksBelow
+        )
+        self.playback_shift_cents_slider.setTickInterval(
+            25
         )
         self.playback_shift_cents_slider.setValue(
             0
@@ -478,6 +484,12 @@ class PlayerController:
         self.playback_speed_slider.setRange(
             70,
             130,
+        )
+        self.playback_speed_slider.setTickPosition(
+            QSlider.TickPosition.TicksBelow
+        )
+        self.playback_speed_slider.setTickInterval(
+            10
         )
         self.playback_speed_slider.setValue(
             100
@@ -767,7 +779,7 @@ class PlayerController:
         )
 
         self.add_marker_button = QPushButton(
-            "Add Marker"
+            "＋ Add Marker"
         )
 
         layout.addWidget(
@@ -812,7 +824,7 @@ class PlayerController:
         )
 
         self.add_region_button = QPushButton(
-            "Add Region"
+            "＋ Add Region"
         )
 
         layout.addWidget(
@@ -845,11 +857,11 @@ class PlayerController:
         )
         layout.setSpacing(8)
 
-        self.play_button = QPushButton("Play")
-        self.pause_button = QPushButton("Pause")
-        self.stop_button = QPushButton("Stop")
-        self.loop_checkbox = QCheckBox("Loop")
-        self.apply_playback_button = QPushButton("Shift")
+        self.play_button = QPushButton("▶ Play")
+        self.pause_button = QPushButton("⏸ Pause")
+        self.stop_button = QPushButton("■ Stop")
+        self.loop_checkbox = QCheckBox("↻ Loop")
+        self.apply_playback_button = QPushButton("↕ Shift")
 
         layout.addWidget(self.play_button)
         layout.addWidget(self.pause_button)
@@ -1021,6 +1033,14 @@ class PlayerController:
             self._sync_playback_speed_slider
         )
 
+        self.playback_shift_cents_slider.sliderReleased.connect(
+            self._snap_playback_cents_slider
+        )
+
+        self.playback_speed_slider.sliderReleased.connect(
+            self._snap_playback_speed_slider
+        )
+
         self.analyze_button.clicked.connect(
             self._analyze_pitch
         )
@@ -1100,10 +1120,14 @@ class PlayerController:
         self.metadata.sruthi = sruthi
         self.metadata.cents = cents
 
-        if self.pitch_track is None:
-            return
+        if self.pitch_track is not None:
+            self._remap_pitch()
 
-        self._remap_pitch()
+        # Recalculate the playback shift for the currently
+        # selected target pitch.
+        self._on_playback_target_changed(
+            self.playback_target_combo.currentText()
+        )
 
     def _remap_pitch(self) -> None:
         """Rebuild pitch mapping using the existing analyzed pitch track."""
@@ -1266,6 +1290,18 @@ class PlayerController:
             self.playback_speed_slider.setValue(
                 slider_value
             )
+
+    def _snap_playback_cents_slider(self) -> None:
+        value = self.playback_shift_cents_slider.value()
+
+        if abs(value) <= 3:
+            self.playback_shift_cents_slider.setValue(0)
+
+    def _snap_playback_speed_slider(self) -> None:
+        value = self.playback_speed_slider.value()
+
+        if abs(value - 100) <= 2:
+            self.playback_speed_slider.setValue(100)
 
     # -----------------------------------------------------------------
     # Playback
