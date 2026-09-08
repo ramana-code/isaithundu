@@ -1419,8 +1419,27 @@ class PlayerController:
             self.player.set_audio(
                 self.audio
             )
-
+            print("Playback settings are unchanged from the original audio.")
             return
+
+        print(
+            "Updating playback audio..."
+        )
+
+        print(
+            f"  Pitch shift : "
+            f"{transform.pitch_semitones:+d} semitones"
+        )
+
+        print(
+            f"  Pitch cents : "
+            f"{transform.pitch_cents:+d} cents"
+        )
+
+        print(
+            f"  Speed       : "
+            f"{transform.speed:.2f}x"
+        )
 
         processed_samples = self.playback_processor.process(
             samples=self.audio.samples,
@@ -1443,7 +1462,7 @@ class PlayerController:
             time_scale=transform.speed,
             timeline_duration=self.audio.duration,
         )
-
+        print("Playback audio update complete.")
     # -----------------------------------------------------------------
     # Marker handling
     # -----------------------------------------------------------------

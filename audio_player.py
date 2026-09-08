@@ -97,7 +97,7 @@ class AudioPlayer:
         return (
             position
             / audio.sample_rate
-            / self._time_scale
+            * self._time_scale
         )
 
     def play(self, start_time: float | None = None,
