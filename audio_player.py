@@ -19,11 +19,49 @@ class AudioPlayer:
         self._playing = False
         self._paused = False
         self._loop = False
+        self._time_scale = 1.0
+        self._timeline_duration = 0.0
 
-    def set_audio(self, audio: AudioData) -> None:
+    def set_audio(
+        self,
+        audio: AudioData,
+    ) -> None:
         self.stop()
+
         with self._lock:
             self.audio = audio
+            self._time_scale = 1.0
+            self._timeline_duration = audio.duration
+            self._start_sample = 0
+            self._end_sample = len(audio.samples)
+            self._position_sample = 0
+            self._playing = False
+            self._paused = False
+
+    def set_playback_audio(
+        self,
+        audio: AudioData,
+        time_scale: float = 1.0,
+        timeline_duration: float | None = None,
+    ) -> None:
+        """Use transformed audio while preserving the original timeline."""
+
+        if time_scale <= 0:
+            raise ValueError(
+                "time_scale must be positive."
+            )
+
+        self.stop()
+
+        with self._lock:
+            self.audio = audio
+            self._time_scale = float(time_scale)
+            self._timeline_duration = (
+                float(timeline_duration)
+                if timeline_duration is not None
+                else audio.duration
+            )
+
             self._start_sample = 0
             self._end_sample = len(audio.samples)
             self._position_sample = 0
@@ -56,7 +94,11 @@ class AudioPlayer:
             position = self._position_sample
         if audio is None or audio.sample_rate <= 0:
             return 0.0
-        return position / audio.sample_rate
+        return (
+            position
+            / audio.sample_rate
+            / self._time_scale
+        )
 
     def play(self, start_time: float | None = None,
              end_time: float | None = None) -> None:
@@ -173,8 +215,31 @@ class AudioPlayer:
         with self._lock:
             self._stream = None
 
-    def _time_to_sample(self, time_seconds: float) -> int:
+    def _time_to_sample(
+        self,
+        time_seconds: float,
+    ) -> int:
+        """Convert original-timeline seconds to playback-buffer samples."""
+
         if self.audio is None:
             return 0
-        time_seconds = max(0.0, min(float(time_seconds), self.audio.duration))
-        return int(round(time_seconds * self.audio.sample_rate))
+
+        time_seconds = max(
+            0.0,
+            min(
+                float(time_seconds),
+                self._timeline_duration,
+            ),
+        )
+
+        playback_time = (
+            time_seconds
+            / self._time_scale
+        )
+
+        return int(
+            round(
+                playback_time
+                * self.audio.sample_rate
+            )
+        )

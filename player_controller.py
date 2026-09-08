@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import numpy as np
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 
+from audio_loader import AudioData
 from audio_player import AudioPlayer
 from marker_dialog import MarkerDialog
 from region_dialog import RegionDialog
@@ -45,7 +47,10 @@ from pitch_mapper import (
 )
 from pitch_view import PitchView
 from scale_registry import ScaleRegistry
-
+from playback_processor import (
+    PlaybackProcessor,
+    PlaybackTransform,
+)
 
 class PlayerController:
     """
@@ -86,6 +91,11 @@ class PlayerController:
 
         self.player = AudioPlayer()
         self.player.set_audio(audio)
+
+        self.playback_processor = PlaybackProcessor()
+
+        self.playback_audio = self.audio
+        self.playback_transform = PlaybackTransform()
 
         self.scale_registry = ScaleRegistry(
             self.SCALE_DATABASE_PATHS
@@ -839,11 +849,13 @@ class PlayerController:
         self.pause_button = QPushButton("Pause")
         self.stop_button = QPushButton("Stop")
         self.loop_checkbox = QCheckBox("Loop")
+        self.apply_playback_button = QPushButton("Shift")
 
         layout.addWidget(self.play_button)
         layout.addWidget(self.pause_button)
         layout.addWidget(self.stop_button)
         layout.addWidget(self.loop_checkbox)
+        layout.addWidget(self.apply_playback_button)
         layout.addStretch()
 
     def _initialize_metadata_display(self) -> None:
@@ -964,6 +976,11 @@ class PlayerController:
             self.player.set_loop
         )
 
+        self.apply_playback_button.clicked.connect(
+            self._update_playback_audio
+        )
+
+        # Playback pitch controls.
         self.cents_slider.valueChanged.connect(
             self._sync_cents_spinbox
         )
@@ -980,6 +997,8 @@ class PlayerController:
             self._update_playback_result
         )
 
+        # Playback cents: slider <-> spinbox.
+
         self.playback_shift_cents_slider.valueChanged.connect(
             self._sync_playback_shift_cents_spin
         )
@@ -991,6 +1010,8 @@ class PlayerController:
         self.playback_shift_cents_spin.valueChanged.connect(
             self._update_playback_result
         )
+
+        # Playback speed: slider <-> spinbox.
 
         self.playback_speed_slider.valueChanged.connect(
             self._sync_playback_speed_spin
@@ -1372,6 +1393,56 @@ class PlayerController:
         marker_id: str,
     ) -> None:
         self.play_near_marker(marker_id, True)
+
+    def _update_playback_audio(self) -> None:
+        """Generate the current playback representation."""
+
+        transform = PlaybackTransform(
+            pitch_semitones=self.playback_shift_spin.value(),
+            pitch_cents=self.playback_shift_cents_spin.value(),
+            speed=self.playback_speed_spin.value(),
+        )
+
+        self.playback_transform = transform
+
+        # No processing is necessary for the default playback state.
+        if (
+            transform.pitch_semitones == 0
+            and transform.pitch_cents == 0
+            and np.isclose(
+                transform.speed,
+                1.0,
+            )
+        ):
+            self.playback_audio = self.audio
+
+            self.player.set_audio(
+                self.audio
+            )
+
+            return
+
+        processed_samples = self.playback_processor.process(
+            samples=self.audio.samples,
+            sample_rate=self.audio.sample_rate,
+            transform=transform,
+        )
+
+        self.playback_audio = AudioData(
+            samples=processed_samples,
+            sample_rate=self.audio.sample_rate,
+            duration=(
+                len(processed_samples)
+                / self.audio.sample_rate
+            ),
+            source_path=self.audio.source_path,
+        )
+
+        self.player.set_playback_audio(
+            self.playback_audio,
+            time_scale=transform.speed,
+            timeline_duration=self.audio.duration,
+        )
 
     # -----------------------------------------------------------------
     # Marker handling
