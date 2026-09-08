@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSlider,
     QSpinBox,
+    QDoubleSpinBox,
     QVBoxLayout,
     QFileDialog,
 )
@@ -25,7 +26,6 @@ from metadata import (
     AudioMetadata,
     Marker,
     Region,
-    MetadataParser,
     MetadataSerializer,
     format_seconds_as_time,
     generate_marker_id,
@@ -91,11 +91,13 @@ class PlayerController:
             self.SCALE_DATABASE_PATHS
         )
 
+        self.pitch_analyzer: PitchAnalyzer | None = None
+        self.pitch_track: PitchTrack | None = None
+        self.pitch_mapper: PitchMapper | None = None
+        self.mapped_pitch_track = None
+
         self._find_frames()
         self._create_load_panel()
-
-        self._analyze_pitch()
-
         self._create_waveforms()
         self._create_pitch_view()
         self._create_marker_table()
@@ -185,51 +187,38 @@ class PlayerController:
 
         layout.setContentsMargins(
             8,
+            6,
             8,
-            8,
-            8,
+            6,
         )
 
-        layout.setSpacing(6)
+        layout.setSpacing(4)
 
         # ---------------------------------------------------------
         # Audio information
         # ---------------------------------------------------------
 
-        audio_file_label = QLabel(
-            f"Audio: {self.audio.source_path.name}"
-        )
-
-        duration_label = QLabel(
-            f"Duration: {self.audio.duration:.3f} s"
-        )
-
-        sample_rate_label = QLabel(
-            f"Sample rate: {self.audio.sample_rate:,} Hz"
-        )
-
         raga = self.scale_registry.get(
             self.metadata.raga
         )
 
-        raga_label = QLabel(
+        audio_info_label = QLabel(
+            f"Audio: {self.audio.source_path.name}; "
+            f"Duration: {self.audio.duration:.3f} s; "
+            f"Sample rate: {self.audio.sample_rate:,} Hz; "
             f"Raga: {raga.display_name}"
         )
 
-        layout.addWidget(
-            audio_file_label
+        audio_info_label.setStyleSheet(
+            "font-size: 9pt; color: #666666;"
+        )
+
+        audio_info_label.setWordWrap(
+            False
         )
 
         layout.addWidget(
-            duration_label
-        )
-
-        layout.addWidget(
-            sample_rate_label
-        )
-
-        layout.addWidget(
-            raga_label
+            audio_info_label
         )
 
         # ---------------------------------------------------------
@@ -346,10 +335,184 @@ class PlayerController:
         )
 
         # ---------------------------------------------------------
+        # Playback settings
+        # ---------------------------------------------------------
+
+        playback_label = QLabel(
+            "Playback"
+        )
+
+        playback_label.setStyleSheet(
+            "font-weight: bold;"
+        )
+
+        layout.addWidget(
+            playback_label
+        )
+
+        # Target pitch convenience selector.
+
+        target_layout = QHBoxLayout()
+
+        target_layout.addWidget(
+            QLabel("Target pitch:")
+        )
+
+        self.playback_target_combo = QComboBox()
+
+        self.playback_target_combo.addItems(
+            [
+                "Original",
+                "D#3",
+                "E3",
+            ]
+        )
+
+        target_layout.addWidget(
+            self.playback_target_combo
+        )
+
+        layout.addLayout(
+            target_layout
+        )
+
+        # Pitch shift in semitones.
+
+        shift_layout = QHBoxLayout()
+
+        shift_layout.addWidget(
+            QLabel("Pitch shift:")
+        )
+
+        self.playback_shift_spin = QSpinBox()
+        self.playback_shift_spin.setRange(
+            -12,
+            12,
+        )
+        self.playback_shift_spin.setValue(
+            0
+        )
+
+        shift_layout.addWidget(
+            self.playback_shift_spin
+        )
+
+        layout.addLayout(
+            shift_layout
+        )
+
+        # Fine pitch adjustment in cents.
+
+        shift_cents_layout = QHBoxLayout()
+
+        shift_cents_layout.addWidget(
+            QLabel("Pitch cents:")
+        )
+
+        self.playback_shift_cents_slider = QSlider(
+            Qt.Orientation.Horizontal
+        )
+
+        self.playback_shift_cents_slider.setRange(
+            -50,
+            50,
+        )
+        self.playback_shift_cents_slider.setValue(
+            0
+        )
+
+        self.playback_shift_cents_spin = QSpinBox()
+        self.playback_shift_cents_spin.setRange(
+            -50,
+            50,
+        )
+        self.playback_shift_cents_spin.setValue(
+            0
+        )
+
+        shift_cents_layout.addWidget(
+            self.playback_shift_cents_slider
+        )
+
+        shift_cents_layout.addWidget(
+            self.playback_shift_cents_spin
+        )
+
+        layout.addLayout(
+            shift_cents_layout
+        )
+
+        # Resulting pitch.
+
+        self.playback_result_label = QLabel(
+            "Resulting pitch: "
+            + self._calculate_playback_result_pitch()
+        )
+
+        layout.addWidget(
+            self.playback_result_label
+        )
+
+        # Playback speed.
+
+        speed_layout = QHBoxLayout()
+
+        speed_layout.addWidget(
+            QLabel("Speed:")
+        )
+
+        self.playback_speed_slider = QSlider(
+            Qt.Orientation.Horizontal
+        )
+
+        self.playback_speed_slider.setRange(
+            70,
+            130,
+        )
+        self.playback_speed_slider.setValue(
+            100
+        )
+
+        self.playback_speed_spin = QDoubleSpinBox()
+        self.playback_speed_spin.setRange(
+            0.70,
+            1.30,
+        )
+        self.playback_speed_spin.setSingleStep(
+            0.01
+        )
+        self.playback_speed_spin.setDecimals(
+            2
+        )
+        self.playback_speed_spin.setValue(
+            1.00
+        )
+
+        speed_layout.addWidget(
+            self.playback_speed_slider
+        )
+
+        speed_layout.addWidget(
+            self.playback_speed_spin
+        )
+
+        layout.addLayout(
+            speed_layout
+        )
+
+        # ---------------------------------------------------------
         # Save buttons
         # ---------------------------------------------------------
 
         save_layout = QHBoxLayout()
+
+        self.analyze_button = QPushButton(
+            "Analyze"
+        )
+
+        save_layout.addWidget(
+            self.analyze_button
+        )
 
         self.apply_tuning_button = QPushButton(
             "Apply"
@@ -380,10 +543,7 @@ class PlayerController:
         )
 
         # Keep references to information labels for future updates.
-        self.audio_file_label = audio_file_label
-        self.duration_label = duration_label
-        self.sample_rate_label = sample_rate_label
-        self.raga_label = raga_label
+        self.audio_info_label = audio_info_label
 
     def _create_waveforms(self) -> None:
         """Create and initialize the synchronized waveform views."""
@@ -399,15 +559,21 @@ class PlayerController:
     def _analyze_pitch(self) -> None:
         """Analyze the complete audio file once and build the mapped pitch track."""
 
-        self.pitch_analyzer: PitchAnalyzer = create_pitch_analyzer(
+        self.analyze_button.setEnabled(False)
+
+        self.pitch_analyzer = create_pitch_analyzer(
             backend=self.PITCH_ANALYZER_BACKEND,
         )
 
-        self.pitch_track: PitchTrack = (
-            self.pitch_analyzer.analyze(self.audio)
+        self.pitch_track = (
+            self.pitch_analyzer.analyze(
+                self.audio
+            )
         )
 
-        sa_frequency_hz = self._calculate_sa_frequency()
+        sa_frequency_hz = (
+            self._calculate_sa_frequency()
+        )
 
         scale = self.scale_registry.get(
             self.metadata.raga
@@ -423,9 +589,26 @@ class PlayerController:
             pitch_system
         )
 
-        self.mapped_pitch_track = self.pitch_mapper.map_track(
-            self.pitch_track
+        self.mapped_pitch_track = (
+            self.pitch_mapper.map_track(
+                self.pitch_track
+            )
         )
+
+        self.pitch_view.set_pitch_track(
+            self.mapped_pitch_track,
+            self.pitch_mapper,
+        )
+
+        print(
+            "Pitch analysis complete"
+        )
+        print(
+            f"Pitch frames  : "
+            f"{self.pitch_track.size:,}"
+        )
+
+        self.analyze_button.setEnabled(False)
 
     def _calculate_sa_frequency(self) -> float:
         """Calculate Sa from the YAML sruthi and cents metadata."""
@@ -442,6 +625,71 @@ class PlayerController:
             2.0 ** (
                 self.metadata.cents / 1200.0
             )
+        )
+
+    def _get_audio_tuning_frequency(self) -> float:
+        """Return the frequency represented by the audio Sruthi and cents."""
+
+        import librosa
+
+        reference_hz = float(
+            librosa.note_to_hz(
+                self.metadata.sruthi
+            )
+        )
+
+        return reference_hz * (
+            2.0 ** (
+                self.metadata.cents / 1200.0
+            )
+        )
+
+    def _pitch_name_from_frequency(
+        self,
+        frequency_hz: float,
+    ) -> str:
+        """Return a readable note name plus cents from a frequency."""
+
+        import librosa
+
+        note_name = librosa.hz_to_note(
+            frequency_hz,
+            cents=True,
+        )
+
+        return note_name
+
+    def _calculate_playback_result_pitch(self) -> str:
+        """Calculate the resulting pitch from playback shift controls."""
+
+        audio_frequency = (
+            self._get_audio_tuning_frequency()
+        )
+
+        semitone_shift = (
+            self.playback_shift_spin.value()
+        )
+
+        cents_shift = (
+            self.playback_shift_cents_spin.value()
+        )
+
+        total_shift_cents = (
+            semitone_shift * 100.0
+            + cents_shift
+        )
+
+        playback_frequency = (
+            audio_frequency
+            * (
+                2.0 ** (
+                    total_shift_cents / 1200.0
+                )
+            )
+        )
+
+        return self._pitch_name_from_frequency(
+            playback_frequency
         )
 
     def _create_pitch_view(self) -> None:
@@ -480,11 +728,6 @@ class PlayerController:
 
         layout.setSpacing(0)
         layout.addWidget(self.pitch_view)
-
-        self.pitch_view.set_pitch_track(
-            self.mapped_pitch_track,
-            self.pitch_mapper,
-        )
 
     def _create_marker_table(self) -> None:
         """Create and install the marker table and Add Marker button."""
@@ -729,6 +972,38 @@ class PlayerController:
             self._sync_cents_slider
         )
 
+        self.playback_target_combo.currentTextChanged.connect(
+            self._on_playback_target_changed
+        )
+
+        self.playback_shift_spin.valueChanged.connect(
+            self._update_playback_result
+        )
+
+        self.playback_shift_cents_slider.valueChanged.connect(
+            self._sync_playback_shift_cents_spin
+        )
+
+        self.playback_shift_cents_spin.valueChanged.connect(
+            self._sync_playback_shift_cents_slider
+        )
+
+        self.playback_shift_cents_spin.valueChanged.connect(
+            self._update_playback_result
+        )
+
+        self.playback_speed_slider.valueChanged.connect(
+            self._sync_playback_speed_spin
+        )
+
+        self.playback_speed_spin.valueChanged.connect(
+            self._sync_playback_speed_slider
+        )
+
+        self.analyze_button.clicked.connect(
+            self._analyze_pitch
+        )
+
         self.apply_tuning_button.clicked.connect(
             self._apply_tuning
         )
@@ -804,10 +1079,16 @@ class PlayerController:
         self.metadata.sruthi = sruthi
         self.metadata.cents = cents
 
+        if self.pitch_track is None:
+            return
+
         self._remap_pitch()
 
     def _remap_pitch(self) -> None:
         """Rebuild pitch mapping using the existing analyzed pitch track."""
+
+        if self.pitch_track is None:
+            return
 
         sa_frequency_hz = self._calculate_sa_frequency()
 
@@ -835,6 +1116,135 @@ class PlayerController:
             self.mapped_pitch_track,
             self.pitch_mapper,
         )
+
+    def _update_playback_result(self) -> None:
+        """Update the resulting pitch displayed in the load panel."""
+
+        self.playback_result_label.setText(
+            "Resulting pitch: "
+            + self._calculate_playback_result_pitch()
+        )
+
+    def _on_playback_target_changed(
+        self,
+        target: str,
+    ) -> None:
+        """Convert a target note into semitone/cents playback shift."""
+
+        if target == "Original":
+            self.playback_shift_spin.setValue(0)
+            self.playback_shift_cents_spin.setValue(0)
+            return
+
+        import librosa
+        import numpy as np
+
+        source_frequency = (
+            self._get_audio_tuning_frequency()
+        )
+
+        target_frequency = float(
+            librosa.note_to_hz(target)
+        )
+
+        shift_cents = (
+            1200.0
+            * np.log2(
+                target_frequency
+                / source_frequency
+            )
+        )
+
+        # Convert to the nearest whole semitone plus
+        # a residual cents adjustment.
+        semitones = int(
+            round(
+                shift_cents / 100.0
+            )
+        )
+
+        residual_cents = int(
+            round(
+                shift_cents
+                - semitones * 100
+            )
+        )
+
+        # Keep the residual within the control range.
+        if residual_cents > 50:
+            semitones += 1
+            residual_cents -= 100
+        elif residual_cents < -50:
+            semitones -= 1
+            residual_cents += 100
+
+        semitones = max(
+            -12,
+            min(12, semitones),
+        )
+
+        self.playback_shift_spin.setValue(
+            semitones
+        )
+
+        self.playback_shift_cents_spin.setValue(
+            residual_cents
+        )
+
+        self._update_playback_result()
+
+    def _sync_playback_shift_cents_spin(
+        self,
+        value: int,
+    ) -> None:
+        """Synchronize playback pitch-cents slider and spin box."""
+
+        if self.playback_shift_cents_spin.value() != value:
+            self.playback_shift_cents_spin.setValue(
+                value
+            )
+
+    def _sync_playback_shift_cents_slider(
+        self,
+        value: int,
+    ) -> None:
+        """Synchronize playback pitch-cents spin box and slider."""
+
+        if self.playback_shift_cents_slider.value() != value:
+            self.playback_shift_cents_slider.setValue(
+                value
+            )
+
+    def _sync_playback_speed_spin(
+        self,
+        value: int,
+    ) -> None:
+        """Synchronize playback-speed slider and spin box."""
+
+        speed = value / 100.0
+
+        if self.playback_speed_spin.value() != speed:
+            self.playback_speed_spin.setValue(
+                speed
+            )
+
+
+    def _sync_playback_speed_slider(
+        self,
+        value: float,
+    ) -> None:
+        """Synchronize playback-speed spin box and slider."""
+
+        slider_value = int(
+            round(
+                value * 100
+            )
+        )
+
+        if self.playback_speed_slider.value() != slider_value:
+            self.playback_speed_slider.setValue(
+                slider_value
+            )
 
     # -----------------------------------------------------------------
     # Playback
@@ -1650,10 +2060,6 @@ class PlayerController:
         print(
             f"Duration      : "
             f"{self.audio.duration:,.3f} seconds"
-        )
-        print(
-            f"Pitch frames  : "
-            f"{self.pitch_track.size:,}"
         )
         print()
         print("First region")
