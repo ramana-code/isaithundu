@@ -9,10 +9,7 @@ from audio_loader import AudioLoader
 from metadata import MetadataParser
 from player_controller import PlayerController
 
-
-YAML_PATH = Path("mohananga.yaml")
 UI_PATH = Path("ui/player.ui")
-
 
 def load_window():
     """Load the Qt Designer UI."""
@@ -34,27 +31,29 @@ def load_window():
 
     return window
 
-
-def load_metadata():
+def load_metadata(
+    yaml_path: Path,
+):
     """Load metadata from the YAML file."""
 
     return MetadataParser().load(
-        str(YAML_PATH)
+        str(yaml_path)
     )
 
-
-def load_audio(metadata):
+def load_audio(
+    metadata,
+    yaml_path: Path,
+):
     """Load the audio referenced by the metadata."""
 
     audio_path = (
-        YAML_PATH.parent
+        yaml_path.parent
         / metadata.audio_filename
     )
 
     return AudioLoader().load(
         audio_path
     )
-
 
 def main():
     app = QApplication(sys.argv)
@@ -70,10 +69,11 @@ def main():
 
     window = load_window()
 
-    metadata = load_metadata()
+    metadata = load_metadata(yaml_path)
 
     audio = load_audio(
-        metadata
+        metadata,
+        yaml_path,
     )
 
     metadata.ensure_default_markers_and_region(
