@@ -130,6 +130,29 @@ class AudioPlayer:
             if self._playing:
                 self._paused = True
 
+    def skip_backward(
+        self,
+        seconds: float,
+    ) -> None:
+        """Move the playback position backward by the given number of seconds."""
+
+        with self._lock:
+            if self.audio is None:
+                return
+
+            skip_samples = int(
+                round(
+                    seconds
+                    / self._time_scale
+                    * self.audio.sample_rate
+                )
+            )
+
+            self._position_sample = max(
+                self._start_sample,
+                self._position_sample - skip_samples,
+            )
+
     def stop(self) -> None:
         with self._lock:
             self._playing = False

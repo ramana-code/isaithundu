@@ -113,6 +113,8 @@ class RegionDialog(QDialog):
             self.region.description or ""
         )
 
+        self.label_edit.setFocus()
+
     @staticmethod
     def _select_marker(
         combo: QComboBox,

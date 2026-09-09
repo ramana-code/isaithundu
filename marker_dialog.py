@@ -87,6 +87,8 @@ class MarkerDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
 
+        self.label_edit.setFocus()
+
     def _save(self) -> None:
         """Validate the edited values and update the marker."""
 

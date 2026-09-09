@@ -860,12 +860,16 @@ class PlayerController:
         self.play_button = QPushButton("▶ Play")
         self.pause_button = QPushButton("⏸ Pause")
         self.stop_button = QPushButton("■ Stop")
+        self.skip_back_5_button = QPushButton("◀◀ 5s")
+        self.skip_back_10_button = QPushButton("◀◀ 10s")
         self.loop_checkbox = QCheckBox("↻ Loop")
         self.apply_playback_button = QPushButton("↕ Shift")
 
         layout.addWidget(self.play_button)
         layout.addWidget(self.pause_button)
         layout.addWidget(self.stop_button)
+        layout.addWidget(self.skip_back_5_button)
+        layout.addWidget(self.skip_back_10_button)
         layout.addWidget(self.loop_checkbox)
         layout.addWidget(self.apply_playback_button)
         layout.addStretch()
@@ -982,6 +986,14 @@ class PlayerController:
 
         self.stop_button.clicked.connect(
             self.stop_playback
+        )
+
+        self.skip_back_5_button.clicked.connect(
+            self.skip_back_5_seconds
+        )
+
+        self.skip_back_10_button.clicked.connect(
+            self.skip_back_10_seconds
         )
 
         self.loop_checkbox.toggled.connect(
@@ -1380,6 +1392,21 @@ class PlayerController:
         )
         self.region_table.set_playback_active(
             False
+        )
+
+    def skip_back_5_seconds(self) -> None:
+        """Skip playback backward by five seconds."""
+
+        self.player.skip_backward(
+            5.0
+        )
+
+
+    def skip_back_10_seconds(self) -> None:
+        """Skip playback backward by ten seconds."""
+
+        self.player.skip_backward(
+            10.0
         )
 
     def play_near_marker(
