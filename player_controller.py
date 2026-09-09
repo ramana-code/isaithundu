@@ -1323,14 +1323,10 @@ class PlayerController:
         return start_time, end_time
 
     def play_region(self) -> None:
-        """Play the currently active region."""
+        """Play or resume the currently active region."""
 
         self.player.set_loop(
             self.loop_checkbox.isChecked()
-        )
-
-        self._set_current_time(
-            self.player.current_time
         )
 
         self.marker_table.set_playback_active(
@@ -1344,10 +1340,15 @@ class PlayerController:
             self._get_active_region_times()
         )
 
-        self.player.play(
-            start_time=start_time,
-            end_time=end_time,
-        )
+        if self.player.is_paused:
+            self.player.play(
+                end_time=end_time,
+            )
+        else:
+            self.player.play(
+                start_time=start_time,
+                end_time=end_time,
+            )
 
     def pause_playback(self) -> None:
         """Pause audio playback."""
