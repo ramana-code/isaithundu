@@ -860,16 +860,12 @@ class PlayerController:
         self.play_button = QPushButton("▶ Play")
         self.pause_button = QPushButton("⏸ Pause")
         self.stop_button = QPushButton("■ Stop")
-        self.skip_back_5_button = QPushButton("◀◀ 5s")
-        self.skip_back_10_button = QPushButton("◀◀ 10s")
         self.loop_checkbox = QCheckBox("↻ Loop")
         self.apply_playback_button = QPushButton("↕ Shift")
 
         layout.addWidget(self.play_button)
         layout.addWidget(self.pause_button)
         layout.addWidget(self.stop_button)
-        layout.addWidget(self.skip_back_5_button)
-        layout.addWidget(self.skip_back_10_button)
         layout.addWidget(self.loop_checkbox)
         layout.addWidget(self.apply_playback_button)
         layout.addStretch()
@@ -938,6 +934,10 @@ class PlayerController:
             self.add_marker
         )
 
+        self.waveforms.marker_clicked.connect(
+            self.select_marker_from_waveform
+        )
+
         # Marker table selection.
         self.marker_table.marker_selected.connect(
             self.select_marker_from_table
@@ -986,14 +986,6 @@ class PlayerController:
 
         self.stop_button.clicked.connect(
             self.stop_playback
-        )
-
-        self.skip_back_5_button.clicked.connect(
-            self.skip_back_5_seconds
-        )
-
-        self.skip_back_10_button.clicked.connect(
-            self.skip_back_10_seconds
         )
 
         self.loop_checkbox.toggled.connect(
@@ -1335,10 +1327,14 @@ class PlayerController:
         return start_time, end_time
 
     def play_region(self) -> None:
-        """Play or resume the currently active region."""
+        """Play the currently active region."""
 
         self.player.set_loop(
             self.loop_checkbox.isChecked()
+        )
+
+        self._set_current_time(
+            self.player.current_time
         )
 
         self.marker_table.set_playback_active(
@@ -1352,15 +1348,10 @@ class PlayerController:
             self._get_active_region_times()
         )
 
-        if self.player.is_paused:
-            self.player.play(
-                end_time=end_time,
-            )
-        else:
-            self.player.play(
-                start_time=start_time,
-                end_time=end_time,
-            )
+        self.player.play(
+            start_time=start_time,
+            end_time=end_time,
+        )
 
     def pause_playback(self) -> None:
         """Pause audio playback."""
@@ -1392,21 +1383,6 @@ class PlayerController:
         )
         self.region_table.set_playback_active(
             False
-        )
-
-    def skip_back_5_seconds(self) -> None:
-        """Skip playback backward by five seconds."""
-
-        self.player.skip_backward(
-            5.0
-        )
-
-
-    def skip_back_10_seconds(self) -> None:
-        """Skip playback backward by ten seconds."""
-
-        self.player.skip_backward(
-            10.0
         )
 
     def play_near_marker(
@@ -1617,6 +1593,23 @@ class PlayerController:
         print(
             f"Created marker: "
             f"{marker.id} at {marker.time}"
+        )
+
+    def select_marker_from_waveform(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Select a marker clicked directly in the waveform."""
+
+        if marker_id not in self.metadata.markers:
+            return
+
+        self.marker_table.select_marker(
+            marker_id
+        )
+
+        self.waveforms.select_marker(
+            marker_id
         )
 
     def select_marker_from_table(

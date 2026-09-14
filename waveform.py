@@ -182,6 +182,8 @@ class WaveformView(pg.PlotWidget):
     """
 
     clicked = Signal(float)
+    marker_clicked = Signal(str)
+    view_panned = Signal(float)
     marker_moved = Signal(str, float)
     marker_move_finished = Signal(str, float)
 
@@ -201,6 +203,14 @@ class WaveformView(pg.PlotWidget):
         self.selected_marker_id: str | None = None
         self._dragging_marker_id: str | None = None
         self.marker_drag_tolerance_pixels = 6
+
+        self._panning_view = False
+        self._pan_start_x = 0.0
+        self._pan_start_center = 0.0
+        self._pan_moved = False
+
+        self._clicked_marker_id: str | None = None
+
         self._playback_active = False
 
         # Target visual resolution.
@@ -478,17 +488,13 @@ class WaveformView(pg.PlotWidget):
         self.playhead.setPos(self.current_time)
 
     def mousePressEvent(self, event) -> None:
-        """Handle marker dragging or new-marker creation."""
+        """Begin marker dragging, view panning, or a marker click."""
 
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self.audio is not None
         ):
             mouse_pos = event.position().toPoint()
-
-            # ---------------------------------------------------------
-            # Selected marker gets first priority: begin dragging.
-            # ---------------------------------------------------------
 
             if self._selected_marker_near_mouse(mouse_pos):
                 self._dragging_marker_id = (
@@ -498,35 +504,23 @@ class WaveformView(pg.PlotWidget):
                 event.accept()
                 return
 
-            # ---------------------------------------------------------
-            # Any other existing marker blocks marker creation.
-            # ---------------------------------------------------------
+            marker_id = self._marker_id_near_mouse(
+                mouse_pos
+            )
 
-            if self._marker_near_mouse(mouse_pos):
+            if marker_id is not None:
+                self._clicked_marker_id = marker_id
                 event.accept()
                 return
 
-            # ---------------------------------------------------------
-            # Otherwise this is a normal marker-creation click.
-            # ---------------------------------------------------------
-
-            scene_pos = self.mapToScene(mouse_pos)
-
-            view_pos = (
-                self.getPlotItem()
-                .vb
-                .mapSceneToView(scene_pos)
+            self._panning_view = True
+            self._pan_start_x = float(
+                mouse_pos.x()
             )
-
-            click_time = max(
-                0.0,
-                min(
-                    float(view_pos.x()),
-                    self.audio.duration,
-                ),
+            self._pan_start_center = (
+                self.view_center_time
             )
-
-            self.clicked.emit(click_time)
+            self._pan_moved = False
 
             event.accept()
             return
@@ -534,7 +528,7 @@ class WaveformView(pg.PlotWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        """Move the selected marker during a drag."""
+        """Move a marker or pan the waveform during a drag."""
 
         if (
             self._dragging_marker_id is not None
@@ -573,10 +567,62 @@ class WaveformView(pg.PlotWidget):
             event.accept()
             return
 
+        if (
+            self._panning_view
+            and self.audio is not None
+        ):
+            mouse_x = float(
+                event.position().x()
+            )
+
+            delta_pixels = (
+                mouse_x
+                - self._pan_start_x
+            )
+
+            if abs(delta_pixels) >= 4.0:
+                self._pan_moved = True
+
+            if self._pan_moved:
+                plot_width = max(
+                    1,
+                    self.getPlotItem().vb.width(),
+                )
+
+                seconds_per_pixel = (
+                    self.window_seconds
+                    / plot_width
+                )
+
+                new_center = (
+                    self._pan_start_center
+                    - delta_pixels
+                    * seconds_per_pixel
+                )
+
+                new_center = max(
+                    0.0,
+                    min(
+                        new_center,
+                        self.audio.duration,
+                    ),
+                )
+
+                self.view_center_time = new_center
+
+                self.update_waveform()
+
+                self.view_panned.emit(
+                    new_center
+                )
+
+            event.accept()
+            return
+
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
-        """Finish a marker drag."""
+        """Finish marker dragging or waveform panning."""
 
         if (
             event.button() == Qt.MouseButton.LeftButton
@@ -606,6 +652,58 @@ class WaveformView(pg.PlotWidget):
                 )
 
             self._dragging_marker_id = None
+
+            event.accept()
+            return
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._clicked_marker_id is not None
+        ):
+            marker_id = self._clicked_marker_id
+
+            self._clicked_marker_id = None
+
+            self.marker_clicked.emit(
+                marker_id
+            )
+
+            event.accept()
+            return
+
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._panning_view
+            and self.audio is not None
+        ):
+            was_dragged = self._pan_moved
+            mouse_pos = event.position().toPoint()
+
+            self._panning_view = False
+            self._pan_moved = False
+
+            if not was_dragged:
+                scene_pos = self.mapToScene(
+                    mouse_pos
+                )
+
+                view_pos = (
+                    self.getPlotItem()
+                    .vb
+                    .mapSceneToView(scene_pos)
+                )
+
+                click_time = max(
+                    0.0,
+                    min(
+                        float(view_pos.x()),
+                        self.audio.duration,
+                    ),
+                )
+
+                self.clicked.emit(
+                    click_time
+                )
 
             event.accept()
             return
@@ -691,6 +789,51 @@ class WaveformView(pg.PlotWidget):
             <= self.marker_drag_tolerance_pixels
         )
 
+    def _marker_id_near_mouse(
+        self,
+        mouse_pos,
+    ) -> str | None:
+        """Return the marker ID under the mouse, if any."""
+
+        if self._playback_active:
+            return None
+
+        for marker_id, (marker_line, _label) in (
+            self.marker_items.items()
+        ):
+            if marker_id in {"m000", "m999"}:
+                continue
+
+            marker_time = float(
+                marker_line.value()
+            )
+
+            scene_pos = (
+                self.getPlotItem()
+                .vb
+                .mapViewToScene(
+                    pg.Point(
+                        marker_time,
+                        0,
+                    )
+                )
+            )
+
+            local_pos = self.mapFromScene(
+                scene_pos
+            )
+
+            if (
+                abs(
+                    local_pos.x()
+                    - mouse_pos.x()
+                )
+                <= self.marker_drag_tolerance_pixels
+            ):
+                return marker_id
+
+        return None
+
     def _marker_near_mouse(
     self,
     mouse_pos,
@@ -730,6 +873,8 @@ class SynchronizedWaveforms(QObject):
     BOTTOM_WINDOW_SECONDS = 20.0
 
     waveform_clicked = Signal(float)
+    marker_clicked = Signal(str)
+    view_panned = Signal(float)
     marker_moved = Signal(str, float)
     marker_move_finished = Signal(str, float)
 
@@ -757,6 +902,22 @@ class SynchronizedWaveforms(QObject):
         )
         self.top_view.clicked.connect(self._waveform_clicked)
         self.bottom_view.clicked.connect(self._waveform_clicked)
+
+        self.top_view.marker_clicked.connect(
+            self._marker_clicked
+        )
+
+        self.bottom_view.marker_clicked.connect(
+            self._marker_clicked
+        )
+
+        self.top_view.view_panned.connect(
+            self._view_panned
+        )
+
+        self.bottom_view.view_panned.connect(
+            self._view_panned
+        )
 
         self.top_view.marker_moved.connect(
             self._marker_moved
@@ -813,9 +974,37 @@ class SynchronizedWaveforms(QObject):
         self.top_view.set_current_time(current_time)
         self.bottom_view.set_current_time(current_time)
 
+    def _marker_clicked(
+        self,
+        marker_id: str,
+    ) -> None:
+        """Forward a waveform marker click to the controller."""
+
+        self.marker_clicked.emit(
+            marker_id
+        )
+
     def _waveform_clicked(self, absolute_time: float) -> None:
         """Handle a click from either synchronized waveform."""
         self.waveform_clicked.emit(absolute_time)
+
+    def _view_panned(
+        self,
+        center_time: float,
+    ) -> None:
+        """Keep both waveform views centered on the same time."""
+
+        self.top_view.recenter_on_time(
+            center_time
+        )
+
+        self.bottom_view.recenter_on_time(
+            center_time
+        )
+
+        self.view_panned.emit(
+            center_time
+        )
 
     def set_playback_position(
         self,
