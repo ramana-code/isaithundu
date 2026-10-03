@@ -77,7 +77,7 @@ class RegionTable(QTableWidget):
             55,
         )
 
-        # Start marker column.
+        # Start time column.
         header.setSectionResizeMode(
             self.START_MARKER_COLUMN,
             QHeaderView.ResizeMode.Fixed,
@@ -87,7 +87,7 @@ class RegionTable(QTableWidget):
             75,
         )
 
-        # End marker column.
+        # End time column.
         header.setSectionResizeMode(
             self.END_MARKER_COLUMN,
             QHeaderView.ResizeMode.Fixed,
@@ -170,16 +170,38 @@ class RegionTable(QTableWidget):
                 start_marker_id = str(region.start)
                 end_marker_id = str(region.end)
 
+                start_marker = metadata.markers.get(
+                    start_marker_id
+                )
+
+                end_marker = metadata.markers.get(
+                    end_marker_id
+                )
+
                 id_item = QTableWidgetItem(
                     region_id
                 )
 
                 start_item = QTableWidgetItem(
-                    start_marker_id
+                    self._format_time(
+                        start_seconds
+                    )
                 )
 
                 end_item = QTableWidgetItem(
-                    end_marker_id
+                    self._format_time(
+                        end_seconds
+                    )
+                )
+
+                start_item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight |
+                    Qt.AlignmentFlag.AlignVCenter
+                )
+
+                end_item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight |
+                    Qt.AlignmentFlag.AlignVCenter
                 )
 
                 label_item = QTableWidgetItem(
@@ -203,24 +225,33 @@ class RegionTable(QTableWidget):
                         region_id,
                     )
 
-                # Store resolved timing on marker cells.
+                # Store marker IDs separately from the displayed
+                # times so clicking these cells still selects the
+                # corresponding marker.
                 start_item.setData(
-                    Qt.ItemDataRole.UserRole + 1,
-                    float(start_seconds),
+                    Qt.ItemDataRole.UserRole + 2,
+                    start_marker_id,
                 )
 
                 end_item.setData(
-                    Qt.ItemDataRole.UserRole + 1,
-                    float(end_seconds),
+                    Qt.ItemDataRole.UserRole + 2,
+                    end_marker_id,
                 )
 
                 tooltip = self._build_region_tooltip(
+                    start_marker_id,
                     start_seconds,
+                    end_marker_id,
                     end_seconds,
                 )
 
-                start_item.setToolTip(tooltip)
-                end_item.setToolTip(tooltip)
+                for item in (
+                    id_item,
+                    start_item,
+                    end_item,
+                    label_item,
+                ):
+                    item.setToolTip(tooltip)
 
                 self.setItem(
                     row,
@@ -258,13 +289,8 @@ class RegionTable(QTableWidget):
     def _format_time(seconds: float) -> str:
         """Format seconds for a tooltip."""
 
-        total_milliseconds = round(
-            float(seconds) * 1000
-        )
-
-        total_seconds, milliseconds = divmod(
-            total_milliseconds,
-            1000,
+        total_seconds = round(
+            float(seconds)
         )
 
         hours, remainder = divmod(
@@ -277,33 +303,27 @@ class RegionTable(QTableWidget):
             60,
         )
 
-        if milliseconds:
-            seconds_text = (
-                f"{seconds_part:02d}."
-                f"{milliseconds:03d}"
-            )
-        else:
-            seconds_text = f"{seconds_part:02d}"
-
         if hours:
             return (
                 f"{hours:02d}:"
                 f"{minutes:02d}:"
-                f"{seconds_text}"
+                f"{seconds_part:02d}"
             )
 
         return (
             f"{minutes:02d}:"
-            f"{seconds_text}"
+            f"{seconds_part:02d}"
         )
 
     @classmethod
     def _build_region_tooltip(
         cls,
+        start_marker_id: str,
         start_seconds: float,
+        end_marker_id: str,
         end_seconds: float,
     ) -> str:
-        """Build the timing tooltip for a region."""
+        """Build the marker and timing tooltip for a region."""
 
         duration = max(
             0.0,
@@ -311,8 +331,10 @@ class RegionTable(QTableWidget):
         )
 
         return (
-            f"Start: {cls._format_time(start_seconds)}\n"
-            f"End: {cls._format_time(end_seconds)}\n"
+            f"Start ID: {start_marker_id}\n"
+            f"Start time: {cls._format_time(start_seconds)}\n"
+            f"End ID: {end_marker_id}\n"
+            f"End time: {cls._format_time(end_seconds)}\n"
             f"Duration: {cls._format_time(duration)}"
         )
 
@@ -337,17 +359,23 @@ class RegionTable(QTableWidget):
             return
 
         if column == self.START_MARKER_COLUMN:
-            marker_id = item.text().strip()
+            marker_id = item.data(
+                Qt.ItemDataRole.UserRole + 2
+            )
+
             if marker_id:
                 self.start_marker_requested.emit(
-                    marker_id
+                    str(marker_id)
                 )
 
         elif column == self.END_MARKER_COLUMN:
-            marker_id = item.text().strip()
+            marker_id = item.data(
+                Qt.ItemDataRole.UserRole + 2
+            )
+
             if marker_id:
                 self.end_marker_requested.emit(
-                    marker_id
+                    str(marker_id)
                 )
 
     def _show_context_menu(self, position) -> None:
